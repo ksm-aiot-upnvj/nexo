@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-09-05)
+
+### Bug Fixes
+
+- **core**: Handle graceful shutdown in background task loops
+  ([`2f839c2`](https://github.com/ksm-aiot-upnvj/nexo/commit/2f839c2045f75c80d566b64136e8778c90b4e08e))
+
+- **gateway**: Drop duplicate published release webhook events
+  ([`efc06f4`](https://github.com/ksm-aiot-upnvj/nexo/commit/efc06f46595fcfb6161eac84d44c5a210a910786))
+
+
 ## v1.13.0 (2026-09-05)
 
 ### Features

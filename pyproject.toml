@@ -1,6 +1,6 @@
 [project]
 name = "nexo"
-version = "1.13.0"
+version = "1.13.1"
 description = "Intelligent LLM-powered Discord Assistant Bot for KSM AIoT"
 readme = "README.md"
 requires-python = ">=3.14"

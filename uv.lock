@@ -7,10 +7,6 @@ resolution-markers = [
     "python_version < '0'",
 ]
 
-[options]
-exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
-exclude-newer-span = "P7D"
-
 [[package]]
 name = "aiofile"
 version = "3.11.1"
@@ -1209,7 +1205,7 @@ wheels = [
 
 [[package]]
 name = "nexo"
-version = "1.13.0"
+version = "1.13.1"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
