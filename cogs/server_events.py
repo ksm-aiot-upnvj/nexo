@@ -984,78 +984,73 @@ class ServerEvents(commands.Cog):
 
         # Only monitor messages in the welcome-and-rules channel
         if message.channel.id == channel_id:
-            content = message.content.lower()
+            fields = {}
+            for line in message.content.splitlines():
+                if ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                fields[key.strip().lower()] = value.strip()
 
-            # Check if all introduction format keywords are present in the message
-            keywords = [
-                "name:",
-                "nickname:",
-                "major(if/si/d3si/ds):",
-                "batch/year:",
-                "hobby:",
-                "interest:",
-                "nim:",
+            required_fields = [
+                "name",
+                "nickname",
+                "nim",
+                "major(if/si/d3si/ds)",
+                "batch/year",
+                "hobby",
+                "interest",
             ]
-            if all(keyword in content for keyword in keywords):
-                # Find the 'Member' role in the server
-                role = discord.utils.get(message.guild.roles, name="Member")
-
-                if not role:
-                    await message.reply(
-                        "⚠️ The 'Member' role was not found on this server. Please tell the admin to create it."
-                    )
-                    return
-
-                try:
-                    await message.author.add_roles(role)
-                    await message.add_reaction("👋")
-
-                    # Extract Nickname using regex
-                    nim_match = re.search(
-                        r"nim:\s*(.+)", message.content, re.IGNORECASE
-                    )
-                    major_match = re.search(
-                        r"major\(if/si/d3si/ds\):\s*(.+)",
-                        message.content,
-                        re.IGNORECASE,
-                    )
-                    nick_match = re.search(
-                        r"nickname:\s*(.+)", message.content, re.IGNORECASE
-                    )
-
-                    nim = nim_match.group(1).strip() if nim_match else None
-                    major = major_match.group(1).strip() if major_match else None
-                    nickname = nick_match.group(1).strip() if nick_match else None
-
-                    if nickname and major and nim:
-                        new_nickname = f"{nickname} {major.upper()}'{nim[:2]} {nim[7:]}"
-                        new_nickname = new_nickname[:32]  # Discord nickname limit
-
-                        try:
-                            await message.author.edit(nick=new_nickname)
-                            await message.reply(
-                                f"Nice to meet you, {nickname}! Welcome to KSM AIoT! 🚀"
-                            )
-                        except discord.Forbidden:
-                            logger.warning(
-                                f"Could not change nickname for {message.author}: Missing permissions / role hierarchy / user is owner."
-                            )
-                    else:
-                        await message.reply(
-                            "⚠️ Could not extract nickname, major, NIM, or batch from your introduction. Please ensure you follow the format correctly."
-                        )
-
-                except discord.Forbidden:
-                    # Bot lacks Manage Roles permission
-                    await message.reply(
-                        "⚠️ The KSM sAIoT Bot tried to assign a role, but it does not have permission (Permission: Manage Roles)."
-                    )
-                except Exception as e:
-                    logger.error(f"Error when assigning role: {e}")
-            else:
+            missing_fields = [
+                field for field in required_fields if not fields.get(field)
+            ]
+            if missing_fields:
                 await message.reply(
-                    "⚠️ The 'Member' role was not found on this server. Please tell the admin to create it."
+                    "⚠️ Your introduction is incomplete. Missing: "
+                    + ", ".join(missing_fields)
+                    + ".",
+                    delete_after=10,
                 )
+                return
+
+            nim = fields["nim"]
+            if not re.fullmatch(r"\d{8,}", nim):
+                await message.reply(
+                    "⚠️ NIM must contain at least 8 digits.", delete_after=10
+                )
+                return
+
+            member_role_id = int(os.environ.get("MEMBER_ROLE_ID", 0))
+            role = message.guild.get_role(member_role_id) if member_role_id else None
+
+            if not role:
+                await message.reply(
+                    "⚠️ I could not find the member role. Please tell the admin to create it.",
+                    delete_after=10,
+                )
+                return
+
+            try:
+                if role not in message.author.roles:
+                    await message.author.add_roles(role)
+
+                new_nickname = (
+                    f"{fields['nickname']} {fields['major(if/si/d3si/ds)'].upper()}"
+                    f"'{nim[:2]} {nim[7:]}"
+                )[:32]
+                if message.author.nick != new_nickname:
+                    await message.author.edit(nick=new_nickname)
+
+                await message.add_reaction("👋")
+                await message.reply(
+                    f"Nice to meet you, {fields['nickname']}! Welcome to KSM AIoT! 🚀",
+                )
+            except discord.Forbidden:
+                await message.reply(
+                    "⚠️ The KSM AIoT Bot does not have permission to assign the role or change your nickname.",
+                    delete_after=10,
+                )
+            except Exception as e:
+                logger.error(f"Error processing introduction: {e}")
 
     @tasks.loop(seconds=60)
     async def reminder_loop(self):

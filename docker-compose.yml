@@ -23,6 +23,7 @@ services:
       - LLAMA_API_KEY
       - GENERATOR_CHANNEL_ID
       - CATEGORY_ID
+      - MEMBER_ROLE_ID
     volumes:
       - ./prompts:/app/prompts
       - ./data:/app/data
