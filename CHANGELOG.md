@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.1 (2026-09-27)
+
+### Bug Fixes
+
+- **onboarding**: Introduction processing and validation logic
+  ([`62bd7f4`](https://github.com/ksm-aiot-upnvj/nexo/commit/62bd7f4379752489c8fed472487cc7a2eb9e0de6))
+
+
 ## v1.15.0 (2026-09-27)
 
 ### Bug Fixes
