@@ -1,0 +1,21 @@
+# Abaikan virtual environment lokal
+.venv
+venv
+ENV/
+
+# Abaikan cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+
+# Abaikan Git & IDE
+.git
+.gitignore
+.idea/
+.vscode/
+
+# Abaikan file log & environment lokal
+*.log
+.env
