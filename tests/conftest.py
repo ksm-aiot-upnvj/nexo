@@ -1,4 +1,5 @@
 import socket
+import asyncio
 from urllib.parse import urlparse
 import pytest
 from db.session import DATABASE_URL, engine
@@ -26,3 +27,11 @@ requires_postgres = pytest.mark.skipif(
 async def dispose_engine_after_test():
     yield
     await engine.dispose()
+
+    pending = [t for t in asyncio.all_tasks() if t != asyncio.current_task()]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    await asyncio.sleep(0)
