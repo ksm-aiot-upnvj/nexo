@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.15.0 (2026-09-27)
+
+### Bug Fixes
+
+- **deps**: Exclude aiodns on Windows to resolve DNS connector error
+  ([`8a2d34e`](https://github.com/ksm-aiot-upnvj/nexo/commit/8a2d34e66b134334aa09e7f3f8f4fcb2e96607fa))
+
+- **tests**: Cancel pending async tasks on cleanup to prevent pytest hanging
+  ([`e86aa8f`](https://github.com/ksm-aiot-upnvj/nexo/commit/e86aa8f9b9489f16d7260b46f424eed5e8ce6c5c))
+
+### Features
+
+- **onboarding**: Update intro template codeblock and auto-rename server nickname
+  ([`904f2a9`](https://github.com/ksm-aiot-upnvj/nexo/commit/904f2a9e8bce28a706531c01c7beb8983d0beb2e))
+
+
 ## v1.14.1 (2026-09-25)
 
 ### Bug Fixes
