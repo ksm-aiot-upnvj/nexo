@@ -946,13 +946,18 @@ class ServerEvents(commands.Cog):
             channel = self.bot.get_channel(channel_id)
             if channel:
                 welcome_msg = (
-                    f"Welcome {member.mention} to the AIoT server! 👋\n"
-                    f"To get more access, please introduce yourself using the following format:\n\n"
+                    f"Welcome {member.mention} to the KSM AIoT server! 👋\n"
+                    f"To get full access, please introduce yourself using the following format:\n\n"
+                    f"```text\n"
                     f"Name:\n"
                     f"Nickname:\n"
+                    f"NIM:\n"
+                    f"Major(IF/SI/D3SI/DS): \n"
                     f"Batch/Year:\n"
                     f"Hobby:\n"
                     f"Interest:\n"
+                    f"```\n"
+                    f"💡 *Note: Discord automatically removes accounts without roles when disconnected/closed. Please complete your intro to keep your access!*"
                 )
                 await channel.send(welcome_msg)
         except discord.Forbidden:
@@ -971,46 +976,86 @@ class ServerEvents(commands.Cog):
         if message.author.bot:
             return
 
-        channel_id = int(os.environ.get("WELCOME_AND_RULES_CHANNEL_ID", 0))
+        try:
+            channel_id = int(os.environ.get("WELCOME_AND_RULES_CHANNEL_ID", 0))
+        except ValueError:
+            logger.error("Invalid channel ID in environment variable.")
+            return
+
         # Only monitor messages in the welcome-and-rules channel
         if message.channel.id == channel_id:
             content = message.content.lower()
 
             # Check if all introduction format keywords are present in the message
-            keywords = ["name:", "nickname:", "batch/year:", "hobby:", "interest:"]
+            keywords = [
+                "name:",
+                "nickname:",
+                "major(if/si/d3si/ds):",
+                "batch/year:",
+                "hobby:",
+                "interest:",
+                "nim:",
+            ]
             if all(keyword in content for keyword in keywords):
                 # Find the 'Member' role in the server
                 role = discord.utils.get(message.guild.roles, name="Member")
 
-                if role:
-                    try:
-                        await message.author.add_roles(role)
-                        await message.add_reaction("👋")
-
-                        # Extract Nickname using regex
-                        match = re.search(
-                            r"nickname:\s*(.+)", message.content, re.IGNORECASE
-                        )
-                        if match:
-                            nickname = match.group(1).strip()
-                            await message.reply(
-                                f"{message.author.mention} Nice to meet you, {nickname}! Welcome to KSM AIoT!"
-                            )
-                        else:
-                            await message.reply(
-                                f"{message.author.mention} Nice to meet you! Welcome to KSM AIoT!"
-                            )
-                    except discord.Forbidden:
-                        # Bot lacks Manage Roles permission
-                        await message.reply(
-                            "⚠️ The KSM AIoT Bot tried to assign a role, but it does not have permission (Permission: Manage Roles)."
-                        )
-                    except Exception as e:
-                        logger.error(f"Error when assigning role: {e}")
-                else:
+                if not role:
                     await message.reply(
                         "⚠️ The 'Member' role was not found on this server. Please tell the admin to create it."
                     )
+                    return
+
+                try:
+                    await message.author.add_roles(role)
+                    await message.add_reaction("👋")
+
+                    # Extract Nickname using regex
+                    nim_match = re.search(
+                        r"nim:\s*(.+)", message.content, re.IGNORECASE
+                    )
+                    major_match = re.search(
+                        r"major\(if/si/d3si/ds\):\s*(.+)",
+                        message.content,
+                        re.IGNORECASE,
+                    )
+                    nick_match = re.search(
+                        r"nickname:\s*(.+)", message.content, re.IGNORECASE
+                    )
+
+                    nim = nim_match.group(1).strip() if nim_match else None
+                    major = major_match.group(1).strip() if major_match else None
+                    nickname = nick_match.group(1).strip() if nick_match else None
+
+                    if nickname and major and nim:
+                        new_nickname = f"{nickname} {major.upper()}'{nim[:2]} {nim[7:]}"
+                        new_nickname = new_nickname[:32]  # Discord nickname limit
+
+                        try:
+                            await message.author.edit(nick=new_nickname)
+                            await message.reply(
+                                f"Nice to meet you, {nickname}! Welcome to KSM AIoT! 🚀"
+                            )
+                        except discord.Forbidden:
+                            logger.warning(
+                                f"Could not change nickname for {message.author}: Missing permissions / role hierarchy / user is owner."
+                            )
+                    else:
+                        await message.reply(
+                            "⚠️ Could not extract nickname, major, NIM, or batch from your introduction. Please ensure you follow the format correctly."
+                        )
+
+                except discord.Forbidden:
+                    # Bot lacks Manage Roles permission
+                    await message.reply(
+                        "⚠️ The KSM sAIoT Bot tried to assign a role, but it does not have permission (Permission: Manage Roles)."
+                    )
+                except Exception as e:
+                    logger.error(f"Error when assigning role: {e}")
+            else:
+                await message.reply(
+                    "⚠️ The 'Member' role was not found on this server. Please tell the admin to create it."
+                )
 
     @tasks.loop(seconds=60)
     async def reminder_loop(self):
