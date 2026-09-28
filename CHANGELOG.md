@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.15.2 (2026-09-28)
+
+### Bug Fixes
+
+- **agent**: Reuse queue message instead of sending separate thinking message
+  ([`1fe6542`](https://github.com/ksm-aiot-upnvj/nexo/commit/1fe6542d09883bb309535ee26cb48d840e15b115))
+
+- **onboarding**: Ignore non-introduction messages in onboarding channel
+  ([`0260e0f`](https://github.com/ksm-aiot-upnvj/nexo/commit/0260e0f5d7206ae9074d52c2fbf11ec76f968530))
+
+
 ## v1.15.1 (2026-09-27)
 
 ### Bug Fixes
