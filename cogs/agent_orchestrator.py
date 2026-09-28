@@ -87,7 +87,10 @@ class AgentOrchestrator(commands.Cog):
                 break
 
             try:
-                if len(queue_item) == 3:
+                queue_status_msg = None
+                if len(queue_item) == 4:
+                    ctx_obj, prompt, queued_time, queue_status_msg = queue_item
+                elif len(queue_item) == 3:
                     ctx_obj, prompt, queued_time = queue_item
                 else:
                     ctx_obj, prompt = queue_item
@@ -106,6 +109,10 @@ class AgentOrchestrator(commands.Cog):
                         try:
                             if is_interaction:
                                 await ctx_obj.edit_original_response(
+                                    content="*Nexo is thinking... 💭*"
+                                )
+                            elif queue_status_msg:
+                                wait_msg = await queue_status_msg.edit(
                                     content="*Nexo is thinking... 💭*"
                                 )
                             else:
@@ -430,9 +437,9 @@ class AgentOrchestrator(commands.Cog):
         )
 
         if not leaderboard:
-            embed.description += (
-                "\n*No token interactions recorded in this server yet.*"
-            )
+            description = embed.description or ""
+            description += "\n*No token interactions recorded in this server yet.*"
+            embed.description = description
         else:
             rank_medals = ["🥇", "🥈", "🥉"]
             for idx, item in enumerate(leaderboard, start=1):
@@ -474,9 +481,9 @@ class AgentOrchestrator(commands.Cog):
         )
 
         if not leaderboard:
-            embed.description += (
-                "\n*No token interactions recorded in this server yet.*"
-            )
+            description = embed.description or ""
+            description += "\n*No token interactions recorded in this server yet.*"
+            embed.description = description
         else:
             rank_medals = ["🥇", "🥈", "🥉"]
             for idx, item in enumerate(leaderboard, start=1):
@@ -582,11 +589,15 @@ class AgentOrchestrator(commands.Cog):
                     position += 1
 
                 if position > 0:
-                    await message.reply(
+                    queue_status_msg = await message.reply(
                         f"⏳ *Your question is currently queued at position #{position}. Please wait a moment!*"
                     )
+                else:
+                    queue_status_msg = None
 
-                await self.bot.message_queue.put((message, final_prompt, time.time()))
+                await self.bot.message_queue.put(
+                    (message, final_prompt, time.time(), queue_status_msg)
+                )
 
             except Exception as tag_err:
                 logger.error(f"Error handling mentioned message: {tag_err}")
