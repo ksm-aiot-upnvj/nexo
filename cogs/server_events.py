@@ -991,6 +991,18 @@ class ServerEvents(commands.Cog):
                 key, value = line.split(":", 1)
                 fields[key.strip().lower()] = value.strip()
 
+            introduction_fields = {
+                "name",
+                "nickname",
+                "nim",
+                "major(if/si/d3si/ds)",
+                "batch/year",
+                "hobby",
+                "interest",
+            }
+            if not introduction_fields.intersection(fields):
+                return
+
             required_fields = [
                 "name",
                 "nickname",
