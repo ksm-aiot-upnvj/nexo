@@ -36,6 +36,7 @@ services:
     volumes:
       - ./prompts:/app/prompts
       - ./data:/app/data
+      - huggingface-cache:/root/.cache/huggingface
       - /home/admin-iot/ksm-aiot/nexo/credentials:/app/credentials:ro
       - /home/admin-iot/ksm-aiot:/home/admin-iot-hydroponik/ksm-aiot:ro
     dns:
@@ -44,7 +45,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 300M
+          memory: 768M
     networks:
       - ksm-aiot-network
       - llm-aiot-network
@@ -55,3 +56,6 @@ networks:
 
   llm-aiot-network:
     external: true
+
+volumes:
+  huggingface-cache:
