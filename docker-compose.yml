@@ -36,7 +36,7 @@ services:
     volumes:
       - ./prompts:/app/prompts
       - ./data:/app/data
-      - huggingface-cache:/root/.cache/huggingface
+      - /home/admin-iot/.cache/huggingface:/root/.cache/huggingface
       - /home/admin-iot/ksm-aiot/nexo/credentials:/app/credentials:ro
       - /home/admin-iot/ksm-aiot:/home/admin-iot-hydroponik/ksm-aiot:ro
     dns:
@@ -57,5 +57,3 @@ networks:
   llm-aiot-network:
     external: true
 
-volumes:
-  huggingface-cache:
