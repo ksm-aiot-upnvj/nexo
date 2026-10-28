@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.18.1 (2026-10-28)
+
+### Bug Fixes
+
+- **tokenizer**: Resolve LiteLLM metadata across routes
+  ([`ffacbfc`](https://github.com/ksm-aiot-upnvj/nexo/commit/ffacbfcb91e3866c929213765c6b9c3274748a95))
+
+- **webhook**: Keep docs deployment away from Portainer
+  ([`bfe649e`](https://github.com/ksm-aiot-upnvj/nexo/commit/bfe649e7206cc8b7390ddd347e730e3ae45ae9b3))
+
+
 ## v1.18.0 (2026-10-28)
 
 ### Bug Fixes
