@@ -41,7 +41,9 @@ sequenceDiagram
 
 Template memilih channel dan gaya pesan berdasarkan repository pada `config/projects.json`. Konfigurasi dapat memuat `discord_channel_id`, `discord_role_id`, judul, emoji, dan URL Portainer. Release yang sudah diterbitkan diarahkan ke channel release notes; prerelease dan event project diarahkan ke channel project atau devlog sesuai konfigurasi.
 
-Workflow yang berhasil dan memiliki nama terkait dokumentasi memakai template pengumuman dokumentasi. Workflow yang berhasil dan terlihat seperti build, push image, Docker, publish image, atau deploy memakai template CD sukses. Setelah notifikasi, `WebhookDeployCog` dapat memanggil Portainer webhook project untuk menjalankan redeploy.
+Dokumentasi memiliki lifecycle sendiri: workflow `Deploy Documentation` membangun dan menerbitkan GitHub Pages. Setelah workflow dokumentasi berhasil, Nexo hanya mengirim pengumuman dokumentasi; event ini tidak memanggil Portainer dan tidak me-redeploy container Nexo. Ini memungkinkan docs terbit tanpa menunggu deployment aplikasi.
+
+Workflow lain yang berhasil dan namanya terlihat seperti build/push image, Docker, publish image, atau deploy dapat diklasifikasikan sebagai CD. Hanya event CD tersebut yang memanggil Portainer webhook project setelah notifikasi/status deployment diproses. Pencocokan nama dokumentasi menggunakan kata utuh seperti `docs`, `documentation`, atau `pages`, sehingga `Docker` tidak salah diklasifikasikan sebagai dokumentasi.
 
 GitHub harus diarahkan ke URL publik aplikasi, misalnya:
 

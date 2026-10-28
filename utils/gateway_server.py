@@ -308,9 +308,10 @@ async def webhook_handler(
             wf_run = getattr(model, "workflow_run", None)
             wf_name = (getattr(wf_run, "name", "") or "").lower()
             if wf_run and getattr(wf_run, "conclusion", None) == "success":
-                if any(k in wf_name for k in ["doc", "docs", "documentation", "pages"]):
+                if re.search(r"\b(?:docs?|documentation|pages)\b", wf_name):
+                    # GitHub Pages deploys the docs independently. Announce its
+                    # success, but do not redeploy the Nexo container in Portainer.
                     is_docs_update = True
-                    is_cd_success = True
                 elif any(
                     k in wf_name
                     for k in [
@@ -388,6 +389,13 @@ async def webhook_handler(
                     logger.info(
                         f"Ignoring unsupported release event action ('{action}')"
                     )
+            elif is_docs_update:
+                # Documentation has its own hosting/deployment lifecycle.
+                launch_background_task(
+                    cog.send_discord_notification(
+                        message_payload, target_channel_id=target_channel_id
+                    )
+                )
             elif is_cd_success:
                 # Defer sending rich CD announcement until AFTER VPS deployment succeeds
                 launch_background_task(
