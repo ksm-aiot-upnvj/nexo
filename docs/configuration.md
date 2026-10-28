@@ -19,8 +19,9 @@ Gunakan ID Snowflake Discord untuk pengaturan channel dan role.
 | --- | --- |
 | `DISCORD_BOT_TOKEN` | Token bot Discord. Wajib untuk menjalankan bot. |
 | `DATABASE_URL` | URL PostgreSQL, misalnya `postgresql+asyncpg://user:password@localhost:5432/nexo_db`. |
-| `LLM_BASE_URL` | Base URL API OpenAI-compatible. Azure: `https://<resource>.services.ai.azure.com/openai/v1`; LiteLLM self-hosted: `https://<host>/gateway/v1`. Jangan tambahkan `/model/info` atau query string. |
+| `LLM_BASE_URL` | Base URL API OpenAI-compatible. Azure: `https://<resource>.services.ai.azure.com/openai/v1`; LiteLLM standar: `http://litellm-gateway:4000/v1`; LiteLLM di balik prefix gateway: `https://<host>/gateway` atau `https://<host>/gateway/v1`. Jangan tambahkan `/model/info` atau query string. |
 | `LLM_API_KEY` | Kunci autentikasi provider LLM atau gateway. Kosongkan hanya jika provider memang mengizinkan akses tanpa kunci. |
+| `HF_TOKEN` | Token Hugging Face read-only opsional untuk mengunduh tokenizer private/gated yang ditunjuk metadata LiteLLM. Token ini terpisah dari `LLM_API_KEY`. |
 | `LLM_MODEL_NAME` | Nama model atau deployment yang dikirim pada request LLM. Untuk Azure, nama deployment yang tidak menyerupai nama model yang dikenal bisa membuat penghitung token memakai fallback perkiraan. |
 | `MCP_SERVER_URL` | Base URL MCP Server; Nexo menambahkan `/sse` untuk koneksi tools. Jangan tambahkan `/sse`. |
 | `TOTAL_CONTEXT_WINDOW` | Ukuran context window yang dipakai untuk mengatur pemangkasan riwayat. Default `8192`. |
@@ -49,11 +50,15 @@ dapat dijangkau dari container; `localhost` menunjuk ke container Nexo sendiri.
 
 ## Tokenizer dan provider LLM
 
-Untuk LiteLLM yang menggunakan route `/gateway/v1`, Nexo meminta metadata
-`/gateway/v1/model/info?model=<LLM_MODEL_NAME>` dan mengambil
-`litellm_params.tokenizer_with_hf_repo`. Gateway harus dapat dijangkau dan
-`LLM_API_KEY` harus diisi jika gateway membutuhkan autentikasi. Tokenizer HF
-yang dipilih harus dapat diunduh atau sudah tersedia di cache lokal.
+Untuk LiteLLM, Nexo meminta metadata model lalu mengambil
+`litellm_params.tokenizer_with_hf_repo`. Pada base URL `/v1` endpoint yang
+dipanggil adalah `/v1/model/info`; pada `/gateway` atau `/gateway/v1`, Nexo
+mempertahankan prefix tersebut. `LLM_API_KEY` dipakai untuk autentikasi ke
+gateway jika diperlukan. Jika repo tokenizer di Hugging Face private atau gated,
+sediakan `HF_TOKEN` dan pastikan akun/token memiliki akses. Tokenizer yang tidak
+dapat dimuat akan memakai perkiraan karakter; kegagalan pemuatan tokenizer
+diingat selama proses berjalan agar Nexo tidak mengulangi unduhan yang gagal
+untuk setiap pesan.
 
 Untuk model OpenAI-compatible seperti GPT, Nexo memakai `tiktoken` bila nama
 model dikenali. Jika lookup atau pemuatan tokenizer gagal, Nexo mencatat warning

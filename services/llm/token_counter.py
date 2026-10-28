@@ -15,6 +15,7 @@ logger = logging.getLogger("token_counter")
 
 LLM_BASE_URL = settings.LLM_BASE_URL
 LLM_API_KEY = settings.LLM_API_KEY.strip("\"' \r\n")
+HF_TOKEN = settings.HF_TOKEN.strip("\"' \r\n")
 TOTAL_CONTEXT_WINDOW = settings.TOTAL_CONTEXT_WINDOW
 LLM_MODEL_NAME = settings.LLM_MODEL_NAME
 ai_client = AsyncOpenAI(
@@ -38,6 +39,7 @@ _TOKEN_CACHE: OrderedDict[str, int] = OrderedDict()
 _MAX_CACHE_SIZE = 1000
 _INFLIGHT_TOKEN_REQUESTS: dict[str, asyncio.Future[int]] = {}
 _TOKENIZERS: dict[str, TokenCounter] = {}
+_TOKENIZER_LOAD_ERRORS: set[str] = set()
 _RESOLVED_TOKENIZER_MODEL: str | None = None
 _MODEL_RESOLUTION_LOCK = asyncio.Lock()
 
@@ -66,7 +68,9 @@ class TokenCounter:
             )
         else:
             self.backend = "transformers"
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_name, use_fast=True, token=HF_TOKEN or None
+            )
             if not getattr(self.tokenizer, "chat_template", None):
                 raise ValueError(
                     f"Tokenizer '{model_name}' has no chat_template. "
@@ -181,7 +185,11 @@ def _get_tokenizer(model_name: str) -> TokenCounter:
 def _is_litellm_gateway() -> bool:
     """Return whether the configured base URL uses the Nexo LiteLLM route."""
     path = urlsplit(LLM_BASE_URL).path.rstrip("/")
-    return path.endswith(("/gateway/v1", "/gateway"))
+    if path.endswith(("/gateway/v1", "/gateway")):
+        return True
+    # LiteLLM's default OpenAI-compatible route is /v1. Azure uses
+    # /openai/v1, which is not a LiteLLM metadata endpoint.
+    return path.endswith("/v1") and not path.endswith("/openai/v1")
 
 
 def _model_info_url() -> str:
@@ -238,10 +246,13 @@ async def _resolve_tokenizer_model() -> str:
                     if isinstance(entry, dict)
                     and entry.get("model_name") == LLM_MODEL_NAME
                 ),
-                model_entries[0] if model_entries else None,
+                None,
             )
-            if not isinstance(model_entry, dict):
-                raise TypeError("LiteLLM model info response contains no model entry")
+            if model_entry is None:
+                raise RuntimeError(
+                    "LiteLLM model info response has no exact entry for "
+                    f"model '{LLM_MODEL_NAME}'"
+                )
 
             model_info = model_entry.get("litellm_params")
             if not isinstance(model_info, dict):
@@ -260,7 +271,14 @@ async def _resolve_tokenizer_model() -> str:
                 LLM_MODEL_NAME,
                 _RESOLVED_TOKENIZER_MODEL,
             )
-        except (aiohttp.ClientError, KeyError, TypeError, ValueError) as error:
+        except (
+            aiohttp.ClientError,
+            KeyError,
+            RuntimeError,
+            TimeoutError,
+            TypeError,
+            ValueError,
+        ) as error:
             logger.warning(
                 "Could not resolve tokenizer for LiteLLM model '%s': %s. "
                 "Falling back to configured model name.",
@@ -297,10 +315,16 @@ async def count_token(text_content: str) -> int:
     future: asyncio.Future[int] = loop.create_future()
     _INFLIGHT_TOKEN_REQUESTS[text_hash] = future
 
+    tokenizer_model = None
     try:
         tokenizer_model = await _resolve_tokenizer_model()
-        token_count = _get_tokenizer(tokenizer_model).count_text(text_content)
+        if tokenizer_model in _TOKENIZER_LOAD_ERRORS:
+            token_count = max(1, len(text_content) // 4)
+        else:
+            token_count = _get_tokenizer(tokenizer_model).count_text(text_content)
     except (KeyError, OSError, RuntimeError, TypeError, ValueError) as error:
+        if tokenizer_model:
+            _TOKENIZER_LOAD_ERRORS.add(tokenizer_model)
         # Conservative fallback: ~4 chars ≈ 1 token.
         token_count = max(1, len(text_content) // 4)
         logger.warning(

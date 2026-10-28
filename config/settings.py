@@ -40,6 +40,7 @@ class Settings(BaseSettings):
         validation_alias="LLM_BASE_URL",
     )
     LLM_API_KEY: str = Field(default="", validation_alias="LLM_API_KEY")
+    HF_TOKEN: str = Field(default="", validation_alias="HF_TOKEN")
     LLM_MODEL_NAME: str = Field(
         default="gemma-4-e2b-qat-q4_0-it",
         validation_alias="LLM_MODEL_NAME",

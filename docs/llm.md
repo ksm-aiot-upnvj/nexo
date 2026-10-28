@@ -44,13 +44,16 @@ LLM_API_KEY=your-api-key
 LLM_MODEL_NAME=your-deployed-model
 ```
 
-Untuk self-hosted LiteLLM gateway, `LLM_BASE_URL` dapat menunjuk ke route
-gateway, misalnya `https://aiot.fik.upnvj.ac.id/gateway/v1`. Nexo mengambil
-`tokenizer_with_hf_repo` dari `/gateway/v1/model/info?model=<LLM_MODEL_NAME>`
-dan menghitung token dengan tokenizer Hugging Face tersebut. Azure tidak
-menyediakan metadata tokenizer LiteLLM melalui route itu. Nexo mencoba memilih
-tokenizer lokal dari nama model/deployment; deployment dengan nama khusus dapat
-memakai fallback perkiraan.
+Untuk LiteLLM, `LLM_BASE_URL` dapat memakai route standar antar-container
+`http://litellm-gateway:4000/v1` atau route ber-prefix seperti
+`https://aiot.fik.upnvj.ac.id/gateway/v1` maupun
+`https://aiot.fik.upnvj.ac.id/gateway`. Nexo meminta metadata di
+`/v1/model/info?model=<LLM_MODEL_NAME>` (prefix gateway tetap dipertahankan),
+lalu memakai `litellm_params.tokenizer_with_hf_repo`. Azure memakai base URL
+`/openai/v1` dan tidak diperlakukan sebagai LiteLLM. Untuk tokenizer gated atau
+private di Hugging Face, sediakan `HF_TOKEN` read-only secara terpisah dari
+`LLM_API_KEY`. Jika tokenizer gagal dimuat, Nexo memakai perkiraan karakter dan
+tidak mengulang unduhan gagal pada setiap pesan selama proses yang sama.
 
 Status provider memanggil endpoint `/models` melalui library `openai` /
 `AsyncOpenAI`. Dengan begitu, pengecekan tidak perlu menghasilkan output model
