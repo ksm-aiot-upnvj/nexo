@@ -10,7 +10,7 @@
 {% elif data.workflow_run and data.workflow_run.head_commit and data.workflow_run.head_commit.message %}
   {% set raw_msg = data.workflow_run.head_commit.message | compact_markdown %}
   {% if "chore(release):" in raw_msg or tag_val %}
-    {% set desc_text = desc_intro ~ "\n\n**📝 Deployed Changes:**\n```text\n" ~ (raw_msg | truncate(1000)) ~ "\n```\n*💡 Rincian perubahan lengkap dapat dilihat melalui tombol **View Changelog** di bawah.*" %}
+    {% set desc_text = desc_intro ~ "\n\n**📝 Deployed Changes:**\n```text\n" ~ (raw_msg | truncate(1000)) ~ "\n```\n*💡 See the **View Changelog** button below for the complete list of changes.*" %}
   {% else %}
     {% set desc_text = desc_intro ~ "\n\n**📝 Deployed Changes:**\n```text\n" ~ (raw_msg | truncate(1000)) ~ "\n```" %}
   {% endif %}
@@ -42,7 +42,7 @@
         {% endif %}
       ],
       "footer": {
-        "text": "Nexo CD Pipeline Service • KSM AIoT"
+        "text": "GitHub CI/CD Pipeline • Nexo"
       }
     }
   ],

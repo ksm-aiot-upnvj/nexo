@@ -26,7 +26,7 @@
       ],
       "thumbnail": {"url": {{ ((actor_avatar ~ "?s=64") if actor_avatar else '') | tojson }}},
       "footer": {
-        "text": "Nexo CI/CD Pipeline • KSM AIoT"
+        "text": "GitHub CI/CD Pipeline • Nexo"
       },
       "timestamp": {{ (data.workflow_run.updated_at | default('') | string) | tojson }}
     }

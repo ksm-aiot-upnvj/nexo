@@ -231,7 +231,7 @@ class AgentOrchestrator(commands.Cog):
                             ):
                                 try:
                                     embed.set_footer(  # noqa: B023
-                                        text=f"{base_footer} • 🧠 Nexo sedang merangkum percakapan..."
+                                        text=f"{base_footer} • 🧠 Nexo is summarizing the conversation..."
                                     )
                                     if is_interaction and hasattr(  # noqa: B023
                                         ctx_obj,
@@ -255,9 +255,9 @@ class AgentOrchestrator(commands.Cog):
                                 try:
                                     embed.set_footer(  # noqa: B023
                                         text=(
-                                            f"{base_footer} • 🧠 Riwayat percakapan diringkas"
+                                            f"{base_footer} • 🧠 Conversation history summarized"
                                             if succeeded
-                                            else f"{base_footer} • ⚠️ Ringkasan percakapan gagal"
+                                            else f"{base_footer} • ⚠️ Conversation summarization failed"
                                         )
                                     )
                                     if is_interaction and hasattr(  # noqa: B023
