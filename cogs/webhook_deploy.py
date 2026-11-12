@@ -72,7 +72,10 @@ class WebhookDeployCog(commands.Cog):
         self.portainer_webhooks = build_portainer_webhooks()
 
     async def send_discord_notification(
-        self, payload: dict[str, Any], target_channel_id: int | None = None
+        self,
+        payload: dict[str, Any],
+        target_channel_id: int | None = None,
+        fallback_to_devlogs: bool = True,
     ):
         """Send notification via webhook URL or bot text channel."""
         components_data = payload.get("components", [])
@@ -103,6 +106,8 @@ class WebhookDeployCog(commands.Cog):
                 logger.warning(
                     f"Target channel ID {target_channel_id} not found in bot, fallback to default."
                 )
+                if not fallback_to_devlogs:
+                    return
 
         webhook_url = settings.WEBHOOK_DEVLOGS_CHANNEL
         if webhook_url.startswith(("http://", "https://")):
@@ -164,7 +169,7 @@ class WebhookDeployCog(commands.Cog):
             pre_payload = {
                 "content": (
                     f"🔄 **Self-Update Initiated for {target_display}**\n"
-                    f"Memicu Webhook Portainer untuk me-recreate kontainer Nexo..."
+                    "Triggering the Portainer webhook to recreate the Nexo container..."
                 ),
             }
             await self.send_discord_notification(
@@ -182,7 +187,7 @@ class WebhookDeployCog(commands.Cog):
                         payload = {
                             "content": (
                                 f"🚀 **Portainer Redeploy Triggered for {target_display}**\n"
-                                f"Webhook Portainer berhasil dipicu. Kontainer sedang di-update..."
+                                "The Portainer webhook was triggered successfully. The container is being updated..."
                             )
                         }
                         await self.send_discord_notification(

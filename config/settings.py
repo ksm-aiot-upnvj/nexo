@@ -13,6 +13,11 @@ class Settings(BaseSettings):
         validation_alias="DATABASE_URL",
     )
     GITHUB_SECRET: str = Field(default="", validation_alias="GITHUB_SECRET")
+    GITHUB_WEBHOOK_MAX_BODY_BYTES: int = Field(
+        default=5 * 1024 * 1024,
+        gt=0,
+        validation_alias="GITHUB_WEBHOOK_MAX_BODY_BYTES",
+    )
 
     PENGURUS_CHANNEL_ID: int = Field(default=0, validation_alias="PENGURUS_CHANNEL_ID")
     ANNOUNCEMENT_CHANNEL_ID: int = Field(

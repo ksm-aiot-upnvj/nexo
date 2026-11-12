@@ -12,6 +12,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from jinja2 import Environment, FileSystemLoader
 
 from config.settings import settings
+from utils.github_webhook_delivery import claim_delivery, finish_delivery
 from utils.verify import verify_signature
 from utils.webhook_schemas import (
     PullRequestSchema,
@@ -141,6 +142,27 @@ def load_projects_config() -> dict[str, Any]:
     return {}
 
 
+async def read_limited_request_body(request: Request, max_bytes: int) -> bytes:
+    """Read a webhook body while enforcing a limit before buffering it fully."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if declared_length < 0:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if declared_length > max_bytes:
+            raise HTTPException(status_code=413, detail="Webhook payload too large")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            raise HTTPException(status_code=413, detail="Webhook payload too large")
+        body.extend(chunk)
+    return bytes(body)
+
+
 def should_send_event(event_name: str, model: Any) -> bool:
     if event_name == "pull_request":
         allowed_actions = {
@@ -160,6 +182,20 @@ def should_send_event(event_name: str, model: Any) -> bool:
         }
     if event_name == "workflow_run":
         wf_run = getattr(model, "workflow_run", None)
+        wf_path = (getattr(wf_run, "path", None) or "").replace("\\", "/").lower()
+        repo_full_name = (
+            getattr(getattr(model, "repository", None), "full_name", "") or ""
+        ).lower()
+        workflow_name = (getattr(wf_run, "name", None) or "").lower()
+        if (
+            repo_full_name == "ksm-aiot-upnvj/nexo"
+            and (
+                wf_path.rsplit("/", maxsplit=1)[-1] == "docker-push.yml"
+                or workflow_name == "build & deploy nexo"
+            )
+            and getattr(wf_run, "conclusion", None) == "skipped"
+        ):
+            return False
         return (
             getattr(model, "action", None) == "completed"
             and wf_run is not None
@@ -190,10 +226,26 @@ async def webhook_handler(
     x_hub_signature_256: str | None = Header(None, alias="X-Hub-Signature-256"),
 ):
     event = x_github_event or "unknown"
-    delivery = x_github_delivery or "unknown"
+    delivery = (x_github_delivery or "").strip()
     secret = x_hub_signature_256 or ""
 
-    raw_body = await request.body()
+    if not delivery or len(delivery) > 128:
+        raise HTTPException(status_code=400, detail="Invalid X-GitHub-Delivery header")
+
+    # Reject missing authentication/configuration before reading the body.
+    if not secret:
+        raise HTTPException(
+            status_code=401, detail="Missing X-Hub-Signature-256 header"
+        )
+    if not settings.GITHUB_SECRET.strip():
+        raise HTTPException(
+            status_code=500,
+            detail="GITHUB_SECRET is not configured on the server",
+        )
+
+    raw_body = await read_limited_request_body(
+        request, settings.GITHUB_WEBHOOK_MAX_BODY_BYTES
+    )
     verify_signature(raw_body, secret)
 
     try:
@@ -205,6 +257,40 @@ async def webhook_handler(
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     logger.info(f"Received GitHub event: '{event}', delivery ID: {delivery}")
+
+    try:
+        claimed = await claim_delivery(delivery, event)
+    except Exception as e:
+        logger.exception("Could not claim GitHub webhook delivery %s", delivery)
+        raise HTTPException(
+            status_code=503, detail="Webhook deduplication is unavailable"
+        ) from e
+
+    if not claimed:
+        logger.info("Ignoring duplicate GitHub webhook delivery: %s", delivery)
+        return {"status": "duplicate_ignored", "event": event, "delivery": delivery}
+
+    try:
+        result = await _process_verified_webhook(event, delivery, payload)
+    except Exception:
+        try:
+            await finish_delivery(delivery, error=True)
+        except Exception:
+            logger.exception("Could not record failed GitHub delivery %s", delivery)
+        raise
+
+    try:
+        await finish_delivery(delivery)
+    except Exception as e:
+        logger.exception("Could not record accepted GitHub delivery %s", delivery)
+        raise HTTPException(
+            status_code=503, detail="Could not record webhook delivery"
+        ) from e
+    return result
+
+
+async def _process_verified_webhook(event: str, delivery: str, payload: Any):
+    """Process a signature-verified and uniquely claimed GitHub delivery."""
 
     # Always persist every incoming payload for analysis & debugging
     event_file = save_webhook_payload(event, payload, delivery)
@@ -303,32 +389,42 @@ async def webhook_handler(
         template_name = f"{event}_message.j2"
         is_cd_success = False
         is_docs_update = False
+        is_nexo_deployment = False
 
         if event == "workflow_run" and getattr(model, "action", None) == "completed":
             wf_run = getattr(model, "workflow_run", None)
             wf_name = (getattr(wf_run, "name", "") or "").lower()
+            is_nexo_deployment = repo_full_name.lower() == "ksm-aiot-upnvj/nexo" and (
+                Path(getattr(wf_run, "path", "") or "").name.lower()
+                == "docker-push.yml"
+                or wf_name == "build & deploy nexo"
+            )
             if wf_run and getattr(wf_run, "conclusion", None) == "success":
                 if re.search(r"\b(?:docs?|documentation|pages)\b", wf_name):
                     # GitHub Pages deploys the docs independently. Announce its
                     # success, but do not redeploy the Nexo container in Portainer.
                     is_docs_update = True
-                elif any(
-                    k in wf_name
-                    for k in [
-                        "build & push",
-                        "build and push",
-                        "docker",
-                        "publish image",
-                        "deploy",
-                    ]
-                ) and not any(
-                    k in wf_name
-                    for k in [
-                        "ci (lint & format)",
-                        "ci",
-                        "continuous integration",
-                        "continuous delivery",
-                    ]
+                elif (
+                    not is_nexo_deployment
+                    and any(
+                        k in wf_name
+                        for k in [
+                            "build & push",
+                            "build and push",
+                            "docker",
+                            "publish image",
+                            "deploy",
+                        ]
+                    )
+                    and not any(
+                        k in wf_name
+                        for k in [
+                            "ci (lint & format)",
+                            "ci",
+                            "continuous integration",
+                            "continuous delivery",
+                        ]
+                    )
                 ):
                     is_cd_success = True
         elif event == "release" and getattr(model, "action", None) in (
@@ -340,6 +436,8 @@ async def webhook_handler(
 
         if is_docs_update:
             template_name = "announce_docs.j2"
+        elif is_nexo_deployment:
+            template_name = "deployment_status_message.j2"
         elif is_cd_success:
             template_name = "cd_success_message.j2"
 
@@ -396,6 +494,41 @@ async def webhook_handler(
                         message_payload, target_channel_id=target_channel_id
                     )
                 )
+            elif is_nexo_deployment:
+                # The repo channel receives every result. Successful deployments
+                # are also mirrored to devlogs; failures stay out of devlogs.
+                project_channel_id = target_channel_id
+                if project_channel_id:
+                    launch_background_task(
+                        cog.send_discord_notification(
+                            message_payload,
+                            target_channel_id=project_channel_id,
+                            fallback_to_devlogs=False,
+                        )
+                    )
+                else:
+                    logger.error(
+                        "No discord_channel_id configured for Nexo deployment notification."
+                    )
+
+                wf_run = getattr(model, "workflow_run", None)
+                if wf_run and getattr(wf_run, "conclusion", None) == "success":
+                    devlogs_channel_id = int(settings.WEBHOOK_DEVLOGS_CHANNEL_ID)
+                    if devlogs_channel_id and devlogs_channel_id != project_channel_id:
+                        launch_background_task(
+                            cog.send_discord_notification(
+                                message_payload,
+                                target_channel_id=devlogs_channel_id,
+                            )
+                        )
+                    elif (
+                        not devlogs_channel_id
+                        and settings.WEBHOOK_DEVLOGS_CHANNEL
+                        and project_channel_id
+                    ):
+                        launch_background_task(
+                            cog.send_discord_notification(message_payload)
+                        )
             elif is_cd_success:
                 # Defer sending rich CD announcement until AFTER VPS deployment succeeds
                 launch_background_task(

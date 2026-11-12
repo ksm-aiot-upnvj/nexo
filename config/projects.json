@@ -10,11 +10,10 @@
   "ksm-aiot-upnvj/nexo": {
     "team_name": "Tim Core Nexo",
     "discord_channel_id": 1520017240097951774,
-    "discord_role_id": null,
+    "discord_role_id": 1570298928891564173,
     "title": "Nexo Bot Diperbarui!",
     "emoji": "🤖",
-    "deploy_path": null,
-    "portainer_webhook_url": "https://aiot.fik.upnvj.ac.id/api/stacks/webhooks/9d91e598-0bea-4ecc-a5cb-d3ae3765bb77"
+    "deploy_path": null
   },
   "ksm-aiot-upnvj/smart-hydroponic": {
     "team_name": "Tim Smart Hydroponic",
@@ -31,7 +30,7 @@
     "discord_role_id": 1510810906521767956,
     "title": "Smart Hydroponic MCP Diperbarui!",
     "emoji": "🌱",
-    "deploy_path": "/home/admin-iot-hydroponik/ksm-aiot/smart-hydroponic-mcp"
+    "deploy_path": null
   },
   "ksm-aiot-upnvj/plan": {
     "team_name": "Core Team KSM AIoT",

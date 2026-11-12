@@ -1,0 +1,41 @@
+{% set succeeded = data.workflow_run.conclusion == "success" %}
+{% set cancelled = data.workflow_run.conclusion == "cancelled" %}
+{% set status_icon = "✅" if succeeded else ("⚪" if cancelled else "❌") %}
+{% set status_label = "Healthy" if succeeded else ("Workflow cancelled" if cancelled else "Deployment pipeline failed") %}
+{% set commit_text = data.workflow_run.head_sha or (data.workflow_run.head_commit.id if data.workflow_run.head_commit else "-") %}
+{% set description = "Nexo passed its health check after the deployment was triggered." if succeeded else "Check the build, deployment trigger, and health-check steps in the GitHub Actions run." %}
+{
+  "content": {{ (status_icon ~ " **Nexo status: " ~ status_label ~ "**") | tojson }},
+  "embeds": [
+    {
+      "title": {{ ("🤖 Nexo deployment #" ~ data.workflow_run.run_number) | tojson }},
+      "url": {{ (data.workflow_run.html_url | string) | tojson }},
+      "description": {{ description | tojson }},
+      "color": {% if succeeded %}4437377{% elif cancelled %}9807270{% else %}15158332{% endif %},
+      "fields": [
+        {"name": "Repository", "value": {{ data.repository.full_name | tojson }}, "inline": true},
+        {"name": "Workflow status", "value": {{ (data.workflow_run.conclusion or data.workflow_run.status) | capitalize | tojson }}, "inline": true},
+        {"name": "Commit", "value": {{ ("`" ~ commit_text[:12] ~ "`") | tojson }}, "inline": true},
+        {"name": "Trigger", "value": {{ (data.workflow_run.event | tojson) }}, "inline": true},
+        {"name": "Started at", "value": {{ data.workflow_run.created_at | tojson }}, "inline": true},
+        {"name": "Completed at", "value": {{ data.workflow_run.updated_at | tojson }}, "inline": true}
+      ],
+      "footer": {"text": "GitHub CI/CD Pipeline • Nexo"},
+      "timestamp": {{ (data.workflow_run.updated_at | string) | tojson }}
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 5,
+          "label": "View workflow run",
+          "url": {{ (data.workflow_run.html_url | string) | tojson }},
+          "emoji": {"name": "📜"}
+        }
+      ]
+    }
+  ]
+}

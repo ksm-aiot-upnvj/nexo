@@ -146,6 +146,25 @@ class TokenUsageLog(Base):
     )
 
 
+class GitHubWebhookDelivery(Base):
+    __tablename__ = "github_webhook_deliveries"
+
+    delivery_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    event: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class ScheduledAnnouncement(Base):
     __tablename__ = "scheduled_announcements"
 
