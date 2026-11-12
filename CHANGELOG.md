@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.20.0 (2026-11-12)
+
+### Documentation
+
+- **development**: Document Nexo Portainer notifications
+  ([`3ed8a12`](https://github.com/ksm-aiot-upnvj/nexo/commit/3ed8a12dc436ffbea8f79ef777b514764e47c95e))
+
+### Features
+
+- **deploy**: Deploy Nexo through Portainer with health checks
+  ([`c9a2fa8`](https://github.com/ksm-aiot-upnvj/nexo/commit/c9a2fa8f6ae1d77255d7a6324c4f9867903beda6))
+
+
 ## v1.19.1 (2026-11-11)
 
 ### Bug Fixes
