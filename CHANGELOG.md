@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.20.1 (2026-11-12)
+
+### Bug Fixes
+
+- **ci**: Restore release-triggered Docker deployment
+  ([`0d5cfdf`](https://github.com/ksm-aiot-upnvj/nexo/commit/0d5cfdfba7eb158f6052643be8347e04b8db9a87))
+
+### Documentation
+
+- **development**: Remove internal deployment notes
+  ([`be9418c`](https://github.com/ksm-aiot-upnvj/nexo/commit/be9418c045c5bc4809555ca0c7471d75106ac79e))
+
+
 ## v1.20.0 (2026-11-12)
 
 ### Documentation
