@@ -1,15 +1,13 @@
 name: Build & Deploy Nexo
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   build-and-push:
-    name: "Build and Push Docker Image"
-    # semantic-release creates a version-only commit after a merge. The merge
-    # commit already deployed, so skip a duplicate deployment for that commit.
-    if: ${{ !startsWith(github.event.head_commit.message || '', 'chore(release): bump to') }}
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -20,10 +18,36 @@ jobs:
             file: Dockerfile
 
     steps:
-      - name: Checkout
+      - name: Checkout repository and tags
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Set up QEMU (optional for multi-arch)
+      - name: Resolve release tag and source commit
+        id: release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "release" ]]; then
+            tag="$RELEASE_TAG"
+          else
+            tag="$(git tag -l --sort=-v:refname | head -n 1)"
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "::error::No release tag found."
+            exit 1
+          fi
+
+          git checkout --detach "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Buildx
@@ -34,8 +58,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_RELEASE }}
-          
-      - name: Build & Push (${{ matrix.name }})
+
+      - name: Build and push Nexo image
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -43,16 +67,17 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.name }}:latest
-            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.name }}:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.name }}:${{ steps.release.outputs.tag }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.name }}:${{ steps.release.outputs.commit_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy Nexo stack
+    name: Deploy and verify Nexo
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Portainer webhook
+      - name: Trigger Portainer deployment
         shell: bash
         env:
           PORTAINER_WEBHOOK: ${{ secrets.PORTAINER_NEXO_WEBHOOK_URL }}
@@ -75,7 +100,7 @@ jobs:
 
           echo "Portainer accepted the deployment trigger (HTTP $http_status)."
 
-      - name: Wait for Nexo to restart and become healthy
+      - name: Wait for Nexo restart and health check
         shell: bash
         env:
           NEXO_HEALTH_URL: ${{ secrets.NEXO_HEALTH_URL }}
@@ -117,6 +142,6 @@ jobs:
           if [[ "$saw_restart" == true ]]; then
             echo "::error::Nexo did not become healthy within ${timeout_seconds}s after restart."
           else
-            echo "::error::No restart was observed and health could not be tied to this deployment within ${timeout_seconds}s."
+            echo "::error::No restart was observed; health could not be tied to this deployment within ${timeout_seconds}s."
           fi
           exit 1
