@@ -425,26 +425,23 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                     # GitHub Pages deploys the docs independently. Announce its
                     # success, but do not redeploy the Nexo container in Portainer.
                     is_docs_update = True
-                elif (
-                    any(
-                        k in wf_name
-                        for k in [
-                            "build & push",
-                            "build and push",
-                            "docker",
-                            "publish image",
-                            "deploy",
-                        ]
-                    )
-                    and not any(
-                        k in wf_name
-                        for k in [
-                            "ci (lint & format)",
-                            "ci",
-                            "continuous integration",
-                            "continuous delivery",
-                        ]
-                    )
+                elif any(
+                    k in wf_name
+                    for k in [
+                        "build & push",
+                        "build and push",
+                        "docker",
+                        "publish image",
+                        "deploy",
+                    ]
+                ) and not any(
+                    k in wf_name
+                    for k in [
+                        "ci (lint & format)",
+                        "ci",
+                        "continuous integration",
+                        "continuous delivery",
+                    ]
                 ):
                     is_cd_success = True
         elif event == "release" and getattr(model, "action", None) in (
