@@ -1622,7 +1622,7 @@ wheels = [
 
 [[package]]
 name = "nexo"
-version = "1.21.0"
+version = "1.21.1"
 source = { virtual = "." }
 dependencies = [
     { name = "aiodns", marker = "sys_platform != 'win32'" },

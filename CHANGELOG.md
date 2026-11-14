@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.21.1 (2026-11-14)
+
+### Bug Fixes
+
+- **lifecycle**: Align delivery state with side effects
+  ([`0de5b65`](https://github.com/ksm-aiot-upnvj/nexo/commit/0de5b65f9e6d0ba060793dba5b1a5a3e9c3ed07b))
+
+
 ## v1.21.0 (2026-11-14)
 
 ### Features
