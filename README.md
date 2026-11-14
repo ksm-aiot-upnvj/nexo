@@ -168,6 +168,30 @@ uv run main.py
 
 Proyek ini menerapkan standar linting yang ketat menggunakan `ruff` dan pengujian otomatis dengan `pytest`.
 
+### Memasang Git Hook untuk Ruff
+
+Git hook menjalankan lint dan formatter Ruff secara otomatis sebelum commit. Setelah clone repository, pasang dependency pengembangan dan hook satu kali di setiap checkout:
+
+```powershell
+uv sync --dev
+uv run pre-commit install
+```
+
+Setelah itu, gunakan alur Git seperti biasa. Hook memeriksa file Python yang di-stage dan dapat memperbaiki lint atau format secara otomatis. Jika ada file yang berubah, commit akan dihentikan; tinjau lalu stage ulang perubahan tersebut sebelum mengulangi commit:
+
+```powershell
+git add .
+git commit -m "..."
+```
+
+Untuk menjalankan hook secara manual pada seluruh repository:
+
+```powershell
+uv run pre-commit run --all-files
+```
+
+Hook lokal hanya menjalankan Ruff. Jalankan `pytest` secara manual sebelum mengirim perubahan; GitHub Actions juga menjalankan lint, format, dan pengujian.
+
 ### Menjalankan Linter & Formatter
 ```bash
 uv run ruff check --fix .
