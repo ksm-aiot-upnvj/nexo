@@ -77,6 +77,16 @@ def launch_background_task(coro) -> asyncio.Task:
     return task
 
 
+async def finish_delivery_after_tasks(delivery: str, tasks: list[asyncio.Task]) -> None:
+    """Record delivery completion only after its background side effects finish."""
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    task_failed = any(isinstance(result, BaseException) for result in results)
+    try:
+        await finish_delivery(delivery, error=task_failed)
+    except Exception:
+        logger.exception("Could not finalize GitHub delivery %s", delivery)
+
+
 # Jinja2 Template Loader
 TEMPLATES_DIR = Path("templates")
 PROJECTS_CONFIG_PATH = Path("config/projects.json")
@@ -288,14 +298,21 @@ async def webhook_handler(
         logger.info("Ignoring duplicate GitHub webhook delivery: %s", delivery)
         return {"status": "duplicate_ignored", "event": event, "delivery": delivery}
 
+    background_tasks: list[asyncio.Task] = []
     try:
-        result = await _process_verified_webhook(event, delivery, payload)
+        result = await _process_verified_webhook(
+            event, delivery, payload, background_tasks
+        )
     except Exception:
         try:
             await finish_delivery(delivery, error=True)
         except Exception:
             logger.exception("Could not record failed GitHub delivery %s", delivery)
         raise
+
+    if background_tasks:
+        launch_background_task(finish_delivery_after_tasks(delivery, background_tasks))
+        return {"status": "processing", "event": event, "delivery": delivery}
 
     try:
         await finish_delivery(delivery)
@@ -307,7 +324,12 @@ async def webhook_handler(
     return result
 
 
-async def _process_verified_webhook(event: str, delivery: str, payload: Any):
+async def _process_verified_webhook(
+    event: str,
+    delivery: str,
+    payload: Any,
+    background_tasks: list[asyncio.Task] | None = None,
+):
     """Process a signature-verified and uniquely claimed GitHub delivery."""
 
     # Always persist every incoming payload for analysis & debugging
@@ -322,6 +344,12 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
 
     cog = _bot.get_cog("WebhookDeployCog") if _bot else None
     projects_config = load_projects_config()
+    scheduled_tasks = background_tasks if background_tasks is not None else []
+
+    def schedule_background_task(coro):
+        task = launch_background_task(coro)
+        scheduled_tasks.append(task)
+        return task
 
     if event == "ping":
         zen = payload.get("zen", "GitHub Webhook Connected!")
@@ -343,7 +371,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                 )
             }
             target_channel_id = repo_config.get("discord_channel_id")
-            launch_background_task(
+            schedule_background_task(
                 cog.send_discord_notification(
                     ping_msg, target_channel_id=target_channel_id
                 )
@@ -363,7 +391,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                     f"Stored payload to `{event_file}`."
                 ),
             }
-            launch_background_task(cog.send_discord_notification(devlog_msg))
+            schedule_background_task(cog.send_discord_notification(devlog_msg))
 
         return {
             "status": "unsupported_event_stored",
@@ -482,7 +510,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                 action = getattr(model, "action", None)
                 if action == "released":
                     dest_channel_id = release_channel_id or target_channel_id
-                    launch_background_task(
+                    schedule_background_task(
                         cog.send_discord_notification(
                             message_payload, target_channel_id=dest_channel_id
                         )
@@ -491,7 +519,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                     devlogs_channel_id = int(settings.WEBHOOK_DEVLOGS_CHANNEL_ID)
                     dest_channel_id = target_channel_id or devlogs_channel_id
                     if dest_channel_id and dest_channel_id != release_channel_id:
-                        launch_background_task(
+                        schedule_background_task(
                             cog.send_discord_notification(
                                 message_payload, target_channel_id=dest_channel_id
                             )
@@ -506,7 +534,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                     )
             elif is_docs_update:
                 # Documentation has its own hosting/deployment lifecycle.
-                launch_background_task(
+                schedule_background_task(
                     cog.send_discord_notification(
                         message_payload, target_channel_id=target_channel_id
                     )
@@ -516,7 +544,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                 # are also mirrored to devlogs; failures stay out of devlogs.
                 project_channel_id = target_channel_id
                 if project_channel_id:
-                    launch_background_task(
+                    schedule_background_task(
                         cog.send_discord_notification(
                             message_payload,
                             target_channel_id=project_channel_id,
@@ -533,7 +561,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                 if wf_run and getattr(wf_run, "conclusion", None) == "success":
                     devlogs_channel_id = int(settings.WEBHOOK_DEVLOGS_CHANNEL_ID)
                     if devlogs_channel_id and devlogs_channel_id != project_channel_id:
-                        launch_background_task(
+                        schedule_background_task(
                             cog.send_discord_notification(
                                 message_payload,
                                 target_channel_id=devlogs_channel_id,
@@ -544,12 +572,12 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                         and settings.WEBHOOK_DEVLOGS_CHANNEL
                         and project_channel_id
                     ):
-                        launch_background_task(
+                        schedule_background_task(
                             cog.send_discord_notification(message_payload)
                         )
             elif is_cd_success:
                 # Defer sending rich CD announcement until AFTER VPS deployment succeeds
-                launch_background_task(
+                schedule_background_task(
                     cog.trigger_docker_compose(
                         repo_key=repo_key,
                         repo_name=repo_full_name,
@@ -559,7 +587,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                 )
             else:
                 # Standard non-CD event notification (Push, PR, In-progress workflow)
-                launch_background_task(
+                schedule_background_task(
                     cog.send_discord_notification(
                         message_payload, target_channel_id=target_channel_id
                     )

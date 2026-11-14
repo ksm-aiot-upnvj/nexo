@@ -49,10 +49,7 @@ class EventLifecycleMixin:
                         and (db_event.id, 0) not in self._reminded_cache
                     ):
                         self._reminded_cache.add((db_event.id, 0))
-                        sent_list.append(0)
-                        db_event.reminders_sent = sent_list
-                        flag_modified(db_event, "reminders_sent")
-                        await session.commit()
+                        broadcast_sent = False
 
                         channel = self.bot.get_channel(db_event.broadcast_channel_id)
                         if not channel:
@@ -95,11 +92,26 @@ class EventLifecycleMixin:
                                         everyone=True, roles=True, users=True
                                     ),
                                 )
+                                broadcast_sent = True
                             except Exception as error:  # noqa: BLE001
                                 logger.error(
                                     "Failed to send started broadcast on update: %s",
                                     error,
                                 )
+                            finally:
+                                if broadcast_sent:
+                                    sent_list.append(0)
+                                    db_event.reminders_sent = sent_list
+                                    flag_modified(db_event, "reminders_sent")
+                                    try:
+                                        await session.commit()
+                                    except Exception:
+                                        self._reminded_cache.discard((db_event.id, 0))
+                                        raise
+                                else:
+                                    self._reminded_cache.discard((db_event.id, 0))
+                        else:
+                            self._reminded_cache.discard((db_event.id, 0))
 
                     db_event.name = after.name
                     db_event.description = after.description

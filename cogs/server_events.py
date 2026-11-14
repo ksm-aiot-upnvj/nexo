@@ -935,7 +935,13 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
 
                     # 1. AUTO-END: Check if event has ended
                     if now_utc >= expiry_time:
-                        if discord_event and discord_event.status in (
+                        if not discord_event:
+                            continue
+
+                        event_completed = (
+                            discord_event.status == discord.EventStatus.completed
+                        )
+                        if discord_event.status in (
                             discord.EventStatus.active,
                             discord.EventStatus.scheduled,
                         ):
@@ -944,49 +950,56 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                                 logger.info(
                                     f"Auto-ended scheduled event {ev.id} ({ev.name})"
                                 )
+                                event_completed = True
                             except Exception as end_err:  # noqa: BLE001
                                 logger.warning(
                                     f"Could not auto-end discord event {ev.id}: {end_err}"
                                 )
+                                continue
+                        elif discord_event.status not in (
+                            discord.EventStatus.completed,
+                            discord.EventStatus.cancelled,
+                        ):
+                            continue
 
-                            # Broadcast completion message
-                            channel = self.bot.get_channel(ev.broadcast_channel_id)
-                            if channel:
-                                role_mention_str = (
-                                    f"<@&{ev.target_role_id}>"
-                                    if ev.target_role_id
-                                    else None
+                        # Broadcast completion only after Discord confirms the event ended.
+                        channel = self.bot.get_channel(ev.broadcast_channel_id)
+                        if event_completed and channel:
+                            role_mention_str = (
+                                f"<@&{ev.target_role_id}>"
+                                if ev.target_role_id
+                                else None
+                            )
+                            comp_ctx = {
+                                "event": {
+                                    "name": ev.name,
+                                    "location": ev.location,
+                                    "event_url": ev.event_url,
+                                },
+                                "role_mention": role_mention_str,
+                            }
+                            try:
+                                fallback_text = render_event_template(
+                                    "events/broadcast_completed.j2", comp_ctx
                                 )
-                                comp_ctx = {
-                                    "event": {
-                                        "name": ev.name,
-                                        "location": ev.location,
-                                        "event_url": ev.event_url,
-                                    },
-                                    "role_mention": role_mention_str,
-                                }
-                                try:
-                                    fallback_text = render_event_template(
-                                        "events/broadcast_completed.j2", comp_ctx
-                                    )
-                                    comp_text = await generate_dynamic_event_message(
-                                        event_type="completed",
-                                        event_name=ev.name,
-                                        event_description=ev.description,
-                                        fallback_text=fallback_text,
-                                        role_mention=role_mention_str,
-                                        timeout_sec=120.0,
-                                    )
-                                    await channel.send(
-                                        comp_text,
-                                        allowed_mentions=discord.AllowedMentions(
-                                            everyone=True, roles=True, users=True
-                                        ),
-                                    )
-                                except Exception as comp_err:  # noqa: BLE001
-                                    logger.error(
-                                        f"Failed to send completion broadcast: {comp_err}"
-                                    )
+                                comp_text = await generate_dynamic_event_message(
+                                    event_type="completed",
+                                    event_name=ev.name,
+                                    event_description=ev.description,
+                                    fallback_text=fallback_text,
+                                    role_mention=role_mention_str,
+                                    timeout_sec=120.0,
+                                )
+                                await channel.send(
+                                    comp_text,
+                                    allowed_mentions=discord.AllowedMentions(
+                                        everyone=True, roles=True, users=True
+                                    ),
+                                )
+                            except Exception as comp_err:  # noqa: BLE001
+                                logger.error(
+                                    f"Failed to send completion broadcast: {comp_err}"
+                                )
 
                         ev.is_active = False
                         await session.commit()
@@ -999,12 +1012,8 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                         and 0 not in sent
                         and (ev.id, 0) not in self._reminded_cache
                     ):
-                        # Claim/Lock in memory and DB immediately to prevent concurrent broadcast
+                        # Claim in memory while the start transition is in progress.
                         self._reminded_cache.add((ev.id, 0))
-                        sent.append(0)
-                        ev.reminders_sent = sent
-                        flag_modified(ev, "reminders_sent")
-                        await session.commit()
 
                         # If voice/stage channel event is still scheduled, try to start it
                         if (
@@ -1021,6 +1030,8 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                                 logger.warning(
                                     f"Could not auto-start discord event {ev.id}: {start_api_err}"
                                 )
+                                self._reminded_cache.discard((ev.id, 0))
+                                continue
 
                         # Broadcast started message to announcement channel
                         channel = self.bot.get_channel(ev.broadcast_channel_id)
@@ -1032,6 +1043,7 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                             except Exception:  # noqa: BLE001
                                 channel = None
 
+                        start_broadcast_sent = False
                         if channel:
                             role_mention_str = (
                                 f"<@&{ev.target_role_id}>"
@@ -1068,15 +1080,29 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                                 logger.info(
                                     f"Successfully sent the started broadcast for event '{ev.name}'"
                                 )
+                                start_broadcast_sent = True
                             except Exception as start_err:  # noqa: BLE001
                                 logger.error(
                                     f"Failed to send started broadcast for event {ev.id}: {start_err}"
                                 )
 
+                        if start_broadcast_sent:
+                            sent.append(0)
+                            ev.reminders_sent = sent
+                            flag_modified(ev, "reminders_sent")
+                            try:
+                                await session.commit()
+                            except Exception:
+                                self._reminded_cache.discard((ev.id, 0))
+                                raise
+                        else:
+                            self._reminded_cache.discard((ev.id, 0))
+
                     # 3. MULTI-INTERVAL REMINDERS: Check due reminder intervals
                     ev_type = detect_event_type(ev.name)
                     intervals = ev.reminder_intervals or []
                     dirty = False
+                    sent_intervals = []
 
                     for interval in intervals:
                         if (
@@ -1120,19 +1146,21 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                                             everyone=True, roles=True, users=True
                                         ),
                                     )
+                                    sent.append(interval)
+                                    sent_intervals.append(interval)
+                                    dirty = True
                                 except Exception as send_err:  # noqa: BLE001
                                     logger.error(
                                         f"Failed to send reminder for event {ev.id}: {send_err}"
                                     )
 
-                            sent.append(interval)
-                            self._reminded_cache.add((ev.id, interval))
-                            dirty = True
-
                     if dirty:
                         ev.reminders_sent = sent
                         flag_modified(ev, "reminders_sent")
                         await session.commit()
+                        self._reminded_cache.update(
+                            (ev.id, interval) for interval in sent_intervals
+                        )
 
                 await session.commit()
         except Exception as e:  # noqa: BLE001

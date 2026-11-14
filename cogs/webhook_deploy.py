@@ -107,7 +107,9 @@ class WebhookDeployCog(commands.Cog):
                     f"Target channel ID {target_channel_id} not found in bot, fallback to default."
                 )
                 if not fallback_to_devlogs:
-                    return
+                    raise RuntimeError(
+                        f"Configured Discord channel {target_channel_id} is unavailable."
+                    )
 
         webhook_url = settings.WEBHOOK_DEVLOGS_CHANNEL
         if webhook_url.startswith(("http://", "https://")):
@@ -117,11 +119,12 @@ class WebhookDeployCog(commands.Cog):
                         webhook_url, json=payload, timeout=10
                     ) as resp:
                         if resp.status not in (200, 204):
-                            logger.warning(
-                                f"Webhook URL returned non-200 status: {resp.status}"
+                            raise RuntimeError(
+                                f"Discord webhook returned HTTP {resp.status}."
                             )
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"Failed to post to Webhook URL: {e}")
+            except Exception:
+                logger.error("Failed to post to Discord webhook.")
+                raise
             return
 
         # Fallback to Channel ID
@@ -150,10 +153,12 @@ class WebhookDeployCog(commands.Cog):
                 else:
                     await channel.send(content=content, embeds=discord_embeds)
             else:
-                logger.warning(f"Could not find Discord channel with ID {channel_id}")
+                raise RuntimeError(
+                    f"Discord fallback channel {channel_id} is unavailable."
+                )
         else:
-            logger.warning(
-                "No WEBHOOK_DEVLOGS_CHANNEL or WEBHOOK_DEVLOGS_CHANNEL_ID configured."
+            raise RuntimeError(
+                "No Discord notification channel or webhook is configured."
             )
 
     async def trigger_portainer_webhook(
