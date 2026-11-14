@@ -2,13 +2,15 @@
 {% set cancelled = data.workflow_run.conclusion == "cancelled" %}
 {% set status_icon = "✅" if succeeded else ("⚪" if cancelled else "❌") %}
 {% set status_label = "Healthy" if succeeded else ("Workflow cancelled" if cancelled else "Deployment pipeline failed") %}
+{% set project_label = config.get("deployment_label", data.repository.name) %}
+{% set project_emoji = config.get("emoji", "🚀") %}
 {% set commit_text = data.workflow_run.head_sha or (data.workflow_run.head_commit.id if data.workflow_run.head_commit else "-") %}
-{% set description = "Nexo passed its health check after the deployment was triggered." if succeeded else "Check the build, deployment trigger, and health-check steps in the GitHub Actions run." %}
+{% set description = project_label ~ " passed its deployment and health checks." if succeeded else "Check the build, deployment, and health-check steps in the GitHub Actions run." %}
 {
-  "content": {{ (status_icon ~ " **Nexo status: " ~ status_label ~ "**") | tojson }},
+  "content": {{ (status_icon ~ " **" ~ project_label ~ " status: " ~ status_label ~ "**") | tojson }},
   "embeds": [
     {
-      "title": {{ ("🤖 Nexo deployment #" ~ data.workflow_run.run_number) | tojson }},
+      "title": {{ (project_emoji ~ " " ~ project_label ~ " deployment #" ~ data.workflow_run.run_number) | tojson }},
       "url": {{ (data.workflow_run.html_url | string) | tojson }},
       "description": {{ description | tojson }},
       "color": {% if succeeded %}4437377{% elif cancelled %}9807270{% else %}15158332{% endif %},
@@ -20,7 +22,7 @@
         {"name": "Started at", "value": {{ data.workflow_run.created_at | tojson }}, "inline": true},
         {"name": "Completed at", "value": {{ data.workflow_run.updated_at | tojson }}, "inline": true}
       ],
-      "footer": {"text": "GitHub CI/CD Pipeline • Nexo"},
+      "footer": {"text": {{ ("GitHub CI/CD Pipeline • " ~ project_label) | tojson }}},
       "timestamp": {{ (data.workflow_run.updated_at | string) | tojson }}
     }
   ],

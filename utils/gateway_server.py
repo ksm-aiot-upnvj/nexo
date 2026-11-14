@@ -163,7 +163,33 @@ async def read_limited_request_body(request: Request, max_bytes: int) -> bytes:
     return bytes(body)
 
 
-def should_send_event(event_name: str, model: Any) -> bool:
+def is_configured_deployment_workflow(
+    model: Any, projects_config: dict[str, Any]
+) -> bool:
+    repository = getattr(model, "repository", None)
+    repo_full_name = getattr(repository, "full_name", "") or ""
+    repo_name = getattr(repository, "name", "") or ""
+    repo_config = projects_config.get(
+        repo_full_name, projects_config.get(repo_name, {})
+    )
+
+    if repo_config.get("deployment_mode") != "github_actions_status":
+        return False
+
+    workflow = getattr(model, "workflow_run", None)
+    workflow_name = (getattr(workflow, "name", "") or "").strip().lower()
+    configured_workflows = repo_config.get("deployment_workflows", [])
+    if not isinstance(configured_workflows, list):
+        return False
+
+    return workflow_name in {
+        str(name).strip().lower() for name in configured_workflows if str(name).strip()
+    }
+
+
+def should_send_event(
+    event_name: str, model: Any, projects_config: dict[str, Any] | None = None
+) -> bool:
     if event_name == "pull_request":
         allowed_actions = {
             "opened",
@@ -182,18 +208,10 @@ def should_send_event(event_name: str, model: Any) -> bool:
         }
     if event_name == "workflow_run":
         wf_run = getattr(model, "workflow_run", None)
-        wf_path = (getattr(wf_run, "path", None) or "").replace("\\", "/").lower()
-        repo_full_name = (
-            getattr(getattr(model, "repository", None), "full_name", "") or ""
-        ).lower()
-        workflow_name = (getattr(wf_run, "name", None) or "").lower()
         if (
-            repo_full_name == "ksm-aiot-upnvj/nexo"
-            and (
-                wf_path.rsplit("/", maxsplit=1)[-1] == "docker-push.yml"
-                or workflow_name == "build & deploy nexo"
-            )
-            and getattr(wf_run, "conclusion", None) == "skipped"
+            getattr(wf_run, "conclusion", None) == "skipped"
+            and projects_config is not None
+            and is_configured_deployment_workflow(model, projects_config)
         ):
             return False
         return (
@@ -365,7 +383,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
             logger.error(f"Failed to validate payload for event '{event}': {e}")
             raise HTTPException(status_code=500, detail="Payload validation failed.")
 
-        if not should_send_event(event, model):
+        if not should_send_event(event, model, projects_config):
             logger.info(
                 f"Filtered event '{event}' with action '{getattr(model, 'action', None)}'"
             )
@@ -389,24 +407,26 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
         template_name = f"{event}_message.j2"
         is_cd_success = False
         is_docs_update = False
-        is_nexo_deployment = False
+        is_github_actions_deployment = False
 
         if event == "workflow_run" and getattr(model, "action", None) == "completed":
             wf_run = getattr(model, "workflow_run", None)
             wf_name = (getattr(wf_run, "name", "") or "").lower()
-            is_nexo_deployment = repo_full_name.lower() == "ksm-aiot-upnvj/nexo" and (
-                Path(getattr(wf_run, "path", "") or "").name.lower()
-                == "docker-push.yml"
-                or wf_name == "build & deploy nexo"
+            is_github_actions_deployment = is_configured_deployment_workflow(
+                model, projects_config
             )
-            if wf_run and getattr(wf_run, "conclusion", None) == "success":
+
+            if is_github_actions_deployment:
+                # The repository workflow owns deployment and health checks.
+                # Report its final status without triggering Portainer again.
+                pass
+            elif wf_run and getattr(wf_run, "conclusion", None) == "success":
                 if re.search(r"\b(?:docs?|documentation|pages)\b", wf_name):
                     # GitHub Pages deploys the docs independently. Announce its
                     # success, but do not redeploy the Nexo container in Portainer.
                     is_docs_update = True
                 elif (
-                    not is_nexo_deployment
-                    and any(
+                    any(
                         k in wf_name
                         for k in [
                             "build & push",
@@ -436,7 +456,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
 
         if is_docs_update:
             template_name = "announce_docs.j2"
-        elif is_nexo_deployment:
+        elif is_github_actions_deployment:
             template_name = "deployment_status_message.j2"
         elif is_cd_success:
             template_name = "cd_success_message.j2"
@@ -494,7 +514,7 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                         message_payload, target_channel_id=target_channel_id
                     )
                 )
-            elif is_nexo_deployment:
+            elif is_github_actions_deployment:
                 # The repo channel receives every result. Successful deployments
                 # are also mirrored to devlogs; failures stay out of devlogs.
                 project_channel_id = target_channel_id
@@ -508,7 +528,8 @@ async def _process_verified_webhook(event: str, delivery: str, payload: Any):
                     )
                 else:
                     logger.error(
-                        "No discord_channel_id configured for Nexo deployment notification."
+                        "No discord_channel_id configured for deployment notification: %s",
+                        repo_full_name,
                     )
 
                 wf_run = getattr(model, "workflow_run", None)

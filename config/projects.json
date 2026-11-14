@@ -13,7 +13,12 @@
     "discord_role_id": 1570298928891564173,
     "title": "Nexo Bot Diperbarui!",
     "emoji": "🤖",
-    "deploy_path": null
+    "deploy_path": null,
+    "deployment_label": "Nexo",
+    "deployment_mode": "github_actions_status",
+    "deployment_workflows": [
+      "Build & Deploy Nexo"
+    ]
   },
   "ksm-aiot-upnvj/smart-hydroponic": {
     "team_name": "Tim Smart Hydroponic",
@@ -22,7 +27,12 @@
     "title": "Smart Hydroponic Diperbarui!",
     "emoji": "🌱",
     "deploy_path": null,
-    "portainer_webhook_url": "https://aiot.fik.upnvj.ac.id/api/stacks/webhooks/3e4c3559-b005-4276-b923-1f7b2ff31aca"
+    "deployment_label": "Smart Hydroponic",
+    "deployment_mode": "github_actions_status",
+    "deployment_workflows": [
+      "Build & Push on Release",
+      "Build & Push Frontend on Release"
+    ]
   },
   "ksm-aiot-upnvj/smart-hydroponic-mcp": {
     "team_name": "Tim Smart Hydroponic",
