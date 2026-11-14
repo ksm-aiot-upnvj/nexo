@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.21.0 (2026-11-14)
+
+### Features
+
+- **webhooks**: Configure deployment status per project
+  ([`470bb7a`](https://github.com/ksm-aiot-upnvj/nexo/commit/470bb7ad3b7ea62e5c4c5e0e089e980623b1df26))
+
+
 ## v1.20.1 (2026-11-12)
 
 ### Bug Fixes
