@@ -22,7 +22,7 @@
     "title": "Smart Hydroponic Diperbarui!",
     "emoji": "🌱",
     "deploy_path": null,
-    "portainer_webhook_url": "https://aiot.fik.upnvj.ac.id/api/stacks/webhooks/275b9d67-8707-415a-8204-b13ba61c8203"
+    "portainer_webhook_url": "https://aiot.fik.upnvj.ac.id/api/stacks/webhooks/3e4c3559-b005-4276-b923-1f7b2ff31aca"
   },
   "ksm-aiot-upnvj/smart-hydroponic-mcp": {
     "team_name": "Tim Smart Hydroponic",
