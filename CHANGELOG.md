@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v1.22.0 (2026-11-15)
+
+### Documentation
+
+- **roadmap**: Track resilience improvements
+  ([`e04d031`](https://github.com/ksm-aiot-upnvj/nexo/commit/e04d031d08fd3d1798f8746b364c6acda405070c))
+
+### Features
+
+- **discord**: Add context-aware AI commands
+  ([`7c3d3ee`](https://github.com/ksm-aiot-upnvj/nexo/commit/7c3d3eeaaef97730ff906c9b0ac0fbbc1cb3a1c5))
+
+- **llm**: Improve queue feedback and summary budgeting
+  ([`44ca93f`](https://github.com/ksm-aiot-upnvj/nexo/commit/44ca93fe2c31991192c4f27f79dc67613ccc221f))
+
+- **llm**: Warm model on startup
+  ([`5c525d5`](https://github.com/ksm-aiot-upnvj/nexo/commit/5c525d52ebed0dcec5c08204af16451aa9cb6330))
+
+- **search**: Add bounded DDGS web search tool
+  ([`9c829b2`](https://github.com/ksm-aiot-upnvj/nexo/commit/9c829b21aa867ef7904c04e204b14c9296fcfd9f))
+
+- **security**: Monitor credential leaks in Discord
+  ([`9a385cf`](https://github.com/ksm-aiot-upnvj/nexo/commit/9a385cf1d7315969b1dbe44049caa3841c893901))
+
+- **webhooks**: Add persistent deployment outbox
+  ([`52467c7`](https://github.com/ksm-aiot-upnvj/nexo/commit/52467c73e8020699f2b0b1827a9d049f9253b4c2))
+
+
 ## v1.21.1 (2026-11-14)
 
 ### Bug Fixes
