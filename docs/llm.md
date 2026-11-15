@@ -39,6 +39,8 @@ sequenceDiagram
 
 Model memilih tool berdasarkan intent. Misalnya, pertanyaan tentang anggota voice channel dapat memanggil `list_voice_channel_members`, sedangkan permintaan membuat event dapat memanggil `schedule_discord_event`. Beberapa tool dalam satu putaran LLM dapat diminta sekaligus. Nexo mengeksekusi panggilan yang bersebelahan secara paralel hanya jika tool tersebut secara eksplisit ditandai read-only. Tool yang mengubah data dan tool MCP tanpa metadata read-only tetap dijalankan berurutan sesuai urutan panggilan model.
 
+Untuk pertanyaan yang membutuhkan informasi terkini atau sumber publik, Nexo dapat memanggil tool lokal `web_search` yang menggunakan DDGS. Pencarian mengembalikan paling banyak lima judul, URL, dan cuplikan pendek; Nexo tidak membuka isi halaman penuh. Pencarian dijalankan di thread agar operasi sinkron tidak memblokir event loop Discord. Isi hasil pencarian dianggap data eksternal yang tidak tepercaya dan tidak boleh diikuti sebagai instruksi. Jika memakai hasil pencarian, Nexo diarahkan menaruh tautan Markdown tepat setelah klaim yang didukung, misalnya `[IPB](https://digitani.ipb.ac.id/merawat-kangkung-hidroponik-begini-cara-praktisnya/)`, memakai URL hasil pencarian apa adanya. Pengguna dapat membuka tautan sumber untuk memeriksa konteks lengkapnya. Ketersediaan pencarian bergantung pada akses keluar HTTPS dari container Nexo dan layanan pencarian yang dipakai DDGS.
+
 Jawaban ditampilkan sebagai embed Discord dengan durasi proses dan informasi token jika provider mengembalikannya. Jika LLM atau tool gagal, pengguna menerima pesan error dan kegagalan dicatat melalui logger.
 
 ## Provider LLM
