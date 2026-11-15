@@ -12,7 +12,7 @@ PREFIX_GUIDES = {
     "help": {
         "description": "Menampilkan panduan, kategori fitur, atau cara pakai command tertentu.",
         "usage": ["$help", "$help <command>", "$help <command> <topik>"],
-        "examples": ["$help say", "$help say to", "$help lomba add"],
+        "examples": ["$help say", "$help say to", "$help competition add"],
     },
     "tools": {
         "description": "Menampilkan local Discord tools dan tools MCP yang aktif.",
@@ -71,15 +71,24 @@ PREFIX_GUIDES = {
             "Topik: `$help say to`, `$help say embed`, `$help say time`, `$help say in`, `$help say list`, dan `$help say cancel`.",
         ],
     },
-    "tokenstats": {
+    "my-token-usage": {
         "description": "Menampilkan statistik token AI milikmu.",
-        "usage": ["$tokenstats", "$tokens", "$mytoken", "/token-stats"],
-        "notes": ["Prefix aliases: `$tokens` dan `$mytoken`."],
+        "usage": ["$my-token-usage", "/my-token-usage"],
+        "notes": [
+            "Prefix aliases: `$token-usage`, `$tokenstats`, `$tokens`, and `$mytoken`."
+        ],
     },
-    "tokenleaderboard": {
+    "server-token-leaderboard": {
         "description": "Menampilkan sepuluh pengguna teratas berdasarkan konsumsi token AI di server ini.",
-        "usage": ["$tokenleaderboard", "$toptoken", "$topusers", "/leaderboard-token"],
-        "notes": ["Prefix aliases: `$toptoken` dan `$topusers`."],
+        "usage": [
+            "$tokenleaderboard",
+            "$toptoken",
+            "$topusers",
+            "/server-token-leaderboard",
+        ],
+        "notes": [
+            "Prefix aliases: `$token-leaderboard`, `$tokenleaderboard`, `$toptoken`, and `$topusers`."
+        ],
     },
 }
 

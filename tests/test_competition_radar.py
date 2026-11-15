@@ -94,14 +94,14 @@ async def test_lomba_add_unauthorized():
     await cog.add_competition.callback(
         cog,
         interaction,
-        nama="Lomba AI",
-        kategori="AI",
+        name="Lomba AI",
+        category="AI",
         deadline="2026-12-31",
     )
 
     interaction.response.send_message.assert_awaited_once()
     msg = interaction.response.send_message.call_args[0][0]
-    assert "Akses Ditolak" in msg
+    assert "permission" in msg
 
 
 @pytest.mark.asyncio
@@ -114,14 +114,14 @@ async def test_lomba_add_invalid_deadline():
     await cog.add_competition.callback(
         cog,
         interaction,
-        nama="Lomba AI",
-        kategori=MagicMock(value="AI"),
+        name="Lomba AI",
+        category=MagicMock(value="AI"),
         deadline="tanggal-salah",
     )
 
     interaction.response.send_message.assert_awaited_once()
     msg = interaction.response.send_message.call_args[0][0]
-    assert "Format tanggal deadline tidak valid" in msg
+    assert "Invalid deadline format" in msg
 
 
 @pytest.mark.asyncio
@@ -134,14 +134,14 @@ async def test_lomba_add_past_deadline():
     await cog.add_competition.callback(
         cog,
         interaction,
-        nama="Lomba AI",
-        kategori=MagicMock(value="AI"),
+        name="Lomba AI",
+        category=MagicMock(value="AI"),
         deadline="2020-01-01 10:00",
     )
 
     interaction.response.send_message.assert_awaited_once()
     msg = interaction.response.send_message.call_args[0][0]
-    assert "harus berada di masa depan" in msg
+    assert "must be in the future" in msg
 
 
 @pytest.mark.asyncio
@@ -176,19 +176,19 @@ async def test_lomba_add_success():
         await cog.add_competition.callback(
             cog,
             interaction,
-            nama="Gemastik 2026",
-            kategori=MagicMock(value="Gemastik/PKM"),
+            name="Gemastik 2026",
+            category=MagicMock(value="Gemastik/PKM"),
             deadline=(datetime.now(UTC) + timedelta(days=30))
             .astimezone(WIB)
             .strftime("%Y-%m-%d %H:%M"),
-            link_pendaftaran="https://gemastik.kemdikbud.go.id",
-            link_panduan="https://gemastik.kemdikbud.go.id/panduan.pdf",
-            deskripsi="Kompetisi TIK Mahasiswa Nasional",
+            registration_url="https://gemastik.kemdikbud.go.id",
+            guide_url="https://gemastik.kemdikbud.go.id/panduan.pdf",
+            details="Kompetisi TIK Mahasiswa Nasional",
         )
 
         interaction.response.send_message.assert_awaited_once()
         sent_embed = interaction.response.send_message.call_args[1]["embed"]
-        assert "Kompetisi Baru Terdaftar" in sent_embed.title
+        assert "Competition Added" in sent_embed.title
 
 
 @pytest.mark.asyncio
@@ -204,10 +204,10 @@ async def test_lomba_list():
         "cogs.competition_radar.list_active_competitions",
         new=AsyncMock(return_value=[]),
     ):
-        await cog.list_competitions.callback(cog, interaction, kategori=None)
+        await cog.list_competitions.callback(cog, interaction, category=None)
         interaction.response.send_message.assert_awaited_once()
         assert (
-            "Belum ada kompetisi aktif"
+            "No active competitions"
             in interaction.response.send_message.call_args[0][0]
         )
 
@@ -228,11 +228,11 @@ async def test_lomba_list():
         await cog.list_competitions.callback(
             cog,
             interaction,
-            kategori=MagicMock(name="AI", value="AI"),
+            category=MagicMock(name="AI", value="AI"),
         )
         interaction.response.send_message.assert_awaited_once()
         embed = interaction.response.send_message.call_args[1]["embed"]
-        assert "Radar Kompetisi & Hackathon KSM AIoT" in embed.title
+        assert "KSM AIoT Competition Radar" in embed.title
         assert "Hackathon AI 2026" in embed.fields[0].name
 
 
@@ -249,9 +249,9 @@ async def test_lomba_detail():
         "cogs.competition_radar.get_competition_by_id",
         new=AsyncMock(return_value=None),
     ):
-        await cog.detail_competition.callback(cog, interaction, id=999)
+        await cog.detail_competition.callback(cog, interaction, competition_id=999)
         interaction.response.send_message.assert_awaited_once()
-        assert "tidak ditemukan" in interaction.response.send_message.call_args[0][0]
+        assert "not found" in interaction.response.send_message.call_args[0][0]
 
     # Case 2: Found
     interaction.response.send_message.reset_mock()
@@ -270,7 +270,7 @@ async def test_lomba_detail():
         "cogs.competition_radar.get_competition_by_id",
         new=AsyncMock(return_value=mock_comp),
     ):
-        await cog.detail_competition.callback(cog, interaction, id=10)
+        await cog.detail_competition.callback(cog, interaction, competition_id=10)
         interaction.response.send_message.assert_awaited_once()
         embed = interaction.response.send_message.call_args[1]["embed"]
         assert "IoT Innovation Award" in embed.title
@@ -288,9 +288,6 @@ async def test_lomba_delete():
         "cogs.competition_radar.delete_competition",
         new=AsyncMock(return_value=True),
     ):
-        await cog.delete_comp.callback(cog, interaction, id=10)
+        await cog.delete_comp.callback(cog, interaction, competition_id=10)
         interaction.response.send_message.assert_awaited_once()
-        assert (
-            "berhasil dinonaktifkan"
-            in interaction.response.send_message.call_args[0][0]
-        )
+        assert "was removed" in interaction.response.send_message.call_args[0][0]

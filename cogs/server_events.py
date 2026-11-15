@@ -78,22 +78,22 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
             self.bot,
             {
                 "list_discord_events": self.list_events_handler,
-                "create_discord_event": self.create_event_handler,
+                "schedule_discord_event": self.create_event_handler,
                 "end_discord_event": self.end_event_handler,
                 "create_discord_thread": self.create_thread_handler,
                 "create_discord_poll": self.create_poll_handler,
                 "end_discord_poll": self.end_poll_handler,
                 "get_server_channels": self.get_channels_handler,
                 "get_server_roles": self.get_roles_handler,
-                "find_server_members": self.find_server_members_handler,
-                "notify_member": self.notify_member_handler,
-                "clear_messages": self.clear_messages_handler,
-                "check_voice_channel": self.check_voice_channel_handler,
+                "search_server_members": self.find_server_members_handler,
+                "mention_member_in_channel": self.notify_member_handler,
+                "delete_channel_messages": self.clear_messages_handler,
+                "list_voice_channel_members": self.check_voice_channel_handler,
             },
         )
 
     async def create_event_handler(self, arguments: dict, ctx_obj=None) -> str:
-        """Function called by the LLM brain when create_discord_event tool is used"""
+        """Create a Discord Scheduled Event from validated tool arguments."""
         try:
             if not has_permission(
                 ctx_obj,
@@ -842,7 +842,7 @@ class ServerEvents(EventLifecycleMixin, VoiceChannelMixin, commands.Cog):
                 return "❌ DENIED: You do not have the 'Manage Messages' permission on this server."
 
             req_data = ClearMessagesSchema.model_validate(arguments)
-            limit = min(req_data.limit, 500)
+            limit = req_data.limit
 
             asyncio.create_task(
                 self._background_delete(ctx_obj.channel, limit, req_data.only_today)

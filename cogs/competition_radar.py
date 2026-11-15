@@ -24,8 +24,8 @@ CATEGORIES = [
     app_commands.Choice(name="📡 Internet of Things (IoT)", value="IoT"),
     app_commands.Choice(name="💻 Web & Mobile Development", value="Web/Mobile"),
     app_commands.Choice(name="📊 Data Science & Analytics", value="Data Science"),
-    app_commands.Choice(name="🏆 Gemastik / PKM / Nasional", value="Gemastik/PKM"),
-    app_commands.Choice(name="🌐 Umum & Lainnya", value="Umum"),
+    app_commands.Choice(name="🏆 Gemastik / PKM / National", value="Gemastik/PKM"),
+    app_commands.Choice(name="🌐 General & Other", value="Umum"),
 ]
 
 
@@ -88,35 +88,35 @@ class CompetitionRadar(commands.Cog):
     def cog_unload(self):
         self.deadline_reminder_loop.cancel()
 
-    lomba_group = app_commands.Group(
-        name="lomba",
-        description="Radar kompetisi, hackathon, dan pengingat deadline KSM AIoT",
+    competition_group = app_commands.Group(
+        name="competition",
+        description="Manage competitions, hackathons, and deadline reminders.",
     )
 
-    @lomba_group.command(
+    @competition_group.command(
         name="add",
-        description="Daftarkan info kompetisi/hackathon baru ke radar KSM",
+        description="Add a competition or hackathon to the server radar.",
     )
-    @app_commands.choices(kategori=CATEGORIES)
+    @app_commands.choices(category=CATEGORIES)
     @app_commands.describe(
-        nama="Nama kompetisi / hackathon (contoh: Gemastik XIX 2026)",
-        deadline="Batas pendaftaran (contoh: 2026-10-15 23:59 atau 2026-10-15)",
-        kategori="Kategori bidang kompetisi",
-        link_pendaftaran="URL halaman pendaftaran kompetisi (opsional)",
-        link_panduan="URL buku panduan / guidebook lomba (opsional)",
-        deskripsi="Keterangan singkat, syarat, atau tema lomba (opsional)",
-        channel="Channel teks untuk broadcast reminder (default: channel aktif)",
-        role="Role yang akan dimention saat countdown darurat (opsional)",
+        name="Competition or hackathon name, for example Gemastik XIX 2026.",
+        deadline="Registration deadline in WIB, for example 2026-10-15 23:59.",
+        category="Competition category.",
+        registration_url="Optional registration page URL.",
+        guide_url="Optional guidebook URL.",
+        details="Optional summary, requirements, or theme.",
+        channel="Channel for deadline reminders; defaults to this channel.",
+        role="Optional role to mention in deadline reminders.",
     )
     async def add_competition(
         self,
         interaction: discord.Interaction,
-        nama: str,
+        name: str,
         deadline: str,
-        kategori: app_commands.Choice[str],
-        link_pendaftaran: str | None = None,
-        link_panduan: str | None = None,
-        deskripsi: str | None = None,
+        category: app_commands.Choice[str],
+        registration_url: str | None = None,
+        guide_url: str | None = None,
+        details: str | None = None,
         channel: discord.TextChannel | None = None,
         role: discord.Role | None = None,
     ):
@@ -126,90 +126,89 @@ class CompetitionRadar(commands.Cog):
             allowed_roles=["Leader", "Co-Leader", "Staff-Core", "Admin"],
         ):
             return await interaction.response.send_message(
-                "❌ **Akses Ditolak**: Anda tidak memiliki izin mendaftarkan kompetisi.",
+                "❌ You do not have permission to add a competition.",
                 ephemeral=True,
             )
 
         deadline_utc = parse_deadline_wib(deadline)
         if not deadline_utc:
             return await interaction.response.send_message(
-                "❌ Format tanggal deadline tidak valid!\n"
-                "Gunakan format: `YYYY-MM-DD HH:MM` atau `YYYY-MM-DD` (contoh: `2026-10-01 23:59`).",
+                "❌ Invalid deadline format. Use `YYYY-MM-DD HH:MM` or `YYYY-MM-DD` in WIB.",
                 ephemeral=True,
             )
 
         now_utc = datetime.now(UTC)
         if deadline_utc <= now_utc:
             return await interaction.response.send_message(
-                "⚠️ Tanggal deadline harus berada di masa depan!",
+                "⚠️ The deadline must be in the future.",
                 ephemeral=True,
             )
 
         target_channel = channel or interaction.channel
         comp = await create_competition(
             guild_id=interaction.guild_id,
-            name=nama.strip(),
-            category=kategori.value,
+            name=name.strip(),
+            category=category.value,
             deadline=deadline_utc,
             channel_id=target_channel.id,
             created_by=interaction.user.id,
-            registration_url=link_pendaftaran.strip() if link_pendaftaran else None,
-            guidebook_url=link_panduan.strip() if link_panduan else None,
-            description=deskripsi.strip() if deskripsi else None,
+            registration_url=registration_url.strip() if registration_url else None,
+            guidebook_url=guide_url.strip() if guide_url else None,
+            description=details.strip() if details else None,
             target_role_id=role.id if role else None,
         )
 
         ts = int(deadline_utc.timestamp())
         embed = discord.Embed(
-            title=f"🏆 Kompetisi Baru Terdaftar: {comp.name}",
-            description=comp.description or "*Tidak ada deskripsi tambahan.*",
+            title=f"🏆 Competition Added: {comp.name}",
+            description=comp.description or "*No additional details provided.*",
             color=discord.Color.gold(),
         )
-        embed.add_field(name="📂 Kategori", value=comp.category, inline=True)
+        embed.add_field(name="📂 Category", value=comp.category, inline=True)
         embed.add_field(
-            name="⏰ Batas Pendaftaran",
+            name="⏰ Registration Deadline",
             value=f"<t:{ts}:F>\n(<t:{ts}:R>)",
             inline=True,
         )
         embed.add_field(
-            name="📢 Channel Info",
+            name="📢 Reminder Channel",
             value=target_channel.mention,
             inline=True,
         )
         if role:
-            embed.add_field(name="🎯 Role Target", value=role.mention, inline=True)
+            embed.add_field(name="🎯 Mentioned Role", value=role.mention, inline=True)
         embed.set_footer(
-            text=f"ID Lomba: {comp.id} • Didaftarkan oleh {interaction.user.display_name}"
+            text=f"Competition ID: {comp.id} • Added by {interaction.user.display_name}"
         )
 
         view = CompetitionView(comp.registration_url, comp.guidebook_url)
         await interaction.response.send_message(embed=embed, view=view)
 
-    @lomba_group.command(
+    @competition_group.command(
         name="list",
-        description="Tampilkan daftar seluruh kompetisi & hackathon yang sedang aktif",
+        description="List active competitions and hackathons.",
     )
-    @app_commands.choices(kategori=CATEGORIES)
-    @app_commands.describe(kategori="Filter berdasarkan kategori bidang (opsional)")
+    @app_commands.choices(category=CATEGORIES)
+    @app_commands.describe(category="Optionally filter by category.")
     async def list_competitions(
         self,
         interaction: discord.Interaction,
-        kategori: app_commands.Choice[str] | None = None,
+        category: app_commands.Choice[str] | None = None,
     ):
         competitions = await list_active_competitions(interaction.guild_id)
-        if kategori:
-            competitions = [c for c in competitions if c.category == kategori.value]
+        if category:
+            competitions = [c for c in competitions if c.category == category.value]
 
         if not competitions:
-            filter_text = f" untuk kategori `{kategori.name}`" if kategori else ""
+            filter_text = f" for category `{category.name}`" if category else ""
             return await interaction.response.send_message(
-                f"ℹ️ Belum ada kompetisi aktif yang terdaftar di radar{filter_text}.",
+                f"ℹ️ No active competitions are currently listed{filter_text}.",
                 ephemeral=True,
             )
 
         embed = discord.Embed(
-            title="📡 Radar Kompetisi & Hackathon KSM AIoT",
-            description="Berikut adalah agenda perlombaan teknologi yang sedang membuka pendaftaran:",
+            title="📡 KSM AIoT Competition Radar",
+            description="Technology competitions that are currently accepting registrations:",
             color=discord.Color.from_rgb(0, 168, 252),
         )
 
@@ -217,10 +216,10 @@ class CompetitionRadar(commands.Cog):
             ts = int(comp.deadline.timestamp())
             links = []
             if comp.registration_url:
-                links.append(f"[Daftar]({comp.registration_url})")
+                links.append(f"[Register]({comp.registration_url})")
             if comp.guidebook_url:
                 links.append(f"[Guidebook]({comp.guidebook_url})")
-            link_str = " • ".join(links) if links else "Link belum tersedia"
+            link_str = " • ".join(links) if links else "No links available"
 
             embed.add_field(
                 name=f"#{comp.id} | {comp.name} [{comp.category}]",
@@ -229,20 +228,22 @@ class CompetitionRadar(commands.Cog):
             )
 
         embed.set_footer(
-            text=f"Total: {len(competitions)} kompetisi aktif • Gunakan /lomba detail <id> untuk info lengkap"
+            text=f"{len(competitions)} active competitions • Use /competition detail to view an entry"
         )
         await interaction.response.send_message(embed=embed)
 
-    @lomba_group.command(
+    @competition_group.command(
         name="detail",
-        description="Tampilkan rincian lengkap informasi suatu kompetisi",
+        description="Show the details of a competition.",
     )
-    @app_commands.describe(id="ID kompetisi yang ingin dilihat")
-    async def detail_competition(self, interaction: discord.Interaction, id: int):
-        comp = await get_competition_by_id(id, interaction.guild_id)
+    @app_commands.describe(competition_id="ID of the competition to view.")
+    async def detail_competition(
+        self, interaction: discord.Interaction, competition_id: int
+    ):
+        comp = await get_competition_by_id(competition_id, interaction.guild_id)
         if not comp or not comp.is_active:
             return await interaction.response.send_message(
-                f"❌ Kompetisi dengan ID `#{id}` tidak ditemukan atau sudah ditutup.",
+                f"❌ Competition `#{competition_id}` was not found or is closed.",
                 ephemeral=True,
             )
 
@@ -252,14 +253,14 @@ class CompetitionRadar(commands.Cog):
 
         embed = discord.Embed(
             title=f"🏆 {comp.name}",
-            description=comp.description or "*Tidak ada deskripsi tambahan.*",
+            description=comp.description or "*No additional details provided.*",
             color=discord.Color.blue(),
         )
-        embed.add_field(name="📂 Kategori", value=comp.category, inline=True)
-        embed.add_field(name="📢 Channel Target", value=ch_text, inline=True)
+        embed.add_field(name="📂 Category", value=comp.category, inline=True)
+        embed.add_field(name="📢 Reminder Channel", value=ch_text, inline=True)
         embed.add_field(
-            name="⏰ Batas Waktu",
-            value=f"<t:{ts}:F>\n**Sisa Waktu:** <t:{ts}:R>",
+            name="⏰ Deadline",
+            value=f"<t:{ts}:F>\n**Time remaining:** <t:{ts}:R>",
             inline=False,
         )
 
@@ -273,37 +274,37 @@ class CompetitionRadar(commands.Cog):
             if comp.reminders_sent
             else "Belum ada"
         )
-        embed.add_field(name="🔔 Reminder Terkirim", value=reminders_text, inline=True)
-        embed.set_footer(text=f"ID Lomba: {comp.id} • KSM AIoT Competition Radar")
+        embed.add_field(name="🔔 Reminders Sent", value=reminders_text, inline=True)
+        embed.set_footer(text=f"Competition ID: {comp.id} • KSM AIoT Competition Radar")
 
         view = CompetitionView(comp.registration_url, comp.guidebook_url)
         await interaction.response.send_message(embed=embed, view=view)
 
-    @lomba_group.command(
+    @competition_group.command(
         name="delete",
-        description="Hapus atau nonaktifkan data kompetisi dari radar (Admin/Staff)",
+        description="Remove a competition from the radar (staff only).",
     )
-    @app_commands.describe(id="ID kompetisi yang ingin dihapus")
-    async def delete_comp(self, interaction: discord.Interaction, id: int):
+    @app_commands.describe(competition_id="ID of the competition to remove.")
+    async def delete_comp(self, interaction: discord.Interaction, competition_id: int):
         if not has_permission(
             interaction,
             "manage_messages",
             allowed_roles=["Leader", "Co-Leader", "Staff-Core", "Admin"],
         ):
             return await interaction.response.send_message(
-                "❌ **Akses Ditolak**: Anda tidak memiliki izin menghapus data kompetisi.",
+                "❌ You do not have permission to remove a competition.",
                 ephemeral=True,
             )
 
-        success = await delete_competition(id, interaction.guild_id)
+        success = await delete_competition(competition_id, interaction.guild_id)
         if success:
             await interaction.response.send_message(
-                f"✅ Data kompetisi `#{id}` berhasil dinonaktifkan dari radar.",
+                f"✅ Competition `#{competition_id}` was removed from the radar.",
                 ephemeral=True,
             )
         else:
             await interaction.response.send_message(
-                f"❌ Kompetisi dengan ID `#{id}` tidak ditemukan.",
+                f"❌ Competition `#{competition_id}` was not found.",
                 ephemeral=True,
             )
 

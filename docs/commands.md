@@ -12,7 +12,7 @@ Nexo menerima command dengan awalan `$` dan slash command dengan awalan `/`. Com
 | `$ping` | `$ping` | Memeriksa latensi bot ke Discord Gateway. |
 | `$status` | `$status` | Memeriksa status layanan Nexo. |
 | `$tools`, `/tools` | `$tools` | Menampilkan kemampuan tambahan yang sedang aktif. |
-| Mention atau `/tanya` | `Nexo, tampilkan daftar channel.` | Menampilkan daftar channel server melalui AI. |
+| Mention atau `/ask` | `Nexo, tampilkan daftar channel.` | Menampilkan daftar channel server melalui AI. |
 | `$sync` | `$sync` | Memperbarui daftar slash command; khusus owner. |
 | `$clear [limit]` | `$clear 50` | Menghapus pesan jika pengguna memiliki izin Manage Messages. |
 | `$reset`, `/reset` | `$reset` | Menghapus riwayat AI milikmu di channel ini. |
@@ -30,9 +30,9 @@ $help say time
 $help say in
 $help say list
 $help say cancel
-$help lomba
-$help lomba add
-$help /tanya
+$help competition
+$help competition add
+$help /ask
 /help command: say to
 ```
 
@@ -51,21 +51,38 @@ izin `Manage Messages`.
 Mention Nexo untuk percakapan natural. Untuk pertanyaan eksplisit, gunakan:
 
 ```text
-/tanya pertanyaan: Bagaimana status project smart hydroponic?
+/ask question: Bagaimana status project smart hydroponic?
 ```
 
-Jika Nexo sedang menjawab pertanyaan lain, pertanyaanmu masuk antrean. `/tanya` memiliki jeda lima detik untuk setiap pengguna di server yang sama.
+Jika Nexo sedang menjawab pertanyaan lain, pertanyaanmu masuk antrean. `/ask` memiliki jeda lima detik untuk setiap pengguna di server yang sama.
+
+### Ringkasan channel
+
+Gunakan `/summarize` untuk merangkum pesan terbaru di channel aktif. Secara
+default Nexo memeriksa sampai 100 pesan, lalu memasukkan pesan terbaru secara
+utuh selama total prompt masih berada dalam batas aman model. Kamu juga dapat
+memberi `message_limit` sebagai batas maksimum pesan yang diperiksa:
+
+```text
+/summarize
+/summarize message_limit:40
+```
+
+Jika seluruh pesan yang diperiksa tidak muat, Nexo memberi tahu berapa pesan
+yang benar-benar dirangkum. Isi pesan tidak dipotong untuk memaksa lebih banyak
+pesan masuk ke konteks.
 
 Gunakan command berikut untuk melihat konsumsi token:
 
 ```text
-$tokenstats
-/token-stats
-$tokenleaderboard
-/leaderboard-token
+$my-token-usage
+/my-token-usage
+$server-token-leaderboard
+/server-token-leaderboard
 ```
 
-`tokenstats` menampilkan prompt token, completion token, total token, jumlah interaksi, dan rata-rata token per interaksi. Leaderboard menampilkan sepuluh pengguna teratas di server.
+`my-token-usage` menampilkan statistik akumulatif milikmu. `server-token-leaderboard`
+menampilkan sepuluh anggota dengan penggunaan token akumulatif tertinggi di server.
 
 ## Mengirim dan menjadwalkan pesan
 
@@ -164,7 +181,7 @@ Untuk melihat daftar channel yang tersedia di server, gunakan percakapan AI:
 
 ```text
 Nexo, tampilkan daftar channel di server ini.
-/tanya pertanyaan: Apa saja channel teks, voice, dan stage yang tersedia?
+/ask question: Apa saja channel teks, voice, dan stage yang tersedia?
 ```
 
 Nexo memiliki tool `get_server_channels` untuk kebutuhan tersebut. Tool ini bukan command prefix atau slash command mandiri, sehingga `$channels` dan `/channels` belum tersedia.
@@ -174,11 +191,11 @@ Nexo memiliki tool `get_server_channels` untuk kebutuhan tersebut. Tool ini buka
 Radar kompetisi tersedia sebagai slash command:
 
 ```text
-/lomba add nama:"Gemastik XIX 2026" deadline:"2026-10-15 23:59" kategori:AI
-/lomba list
-/lomba list kategori:IoT
-/lomba detail id:12
-/lomba delete id:12
+/competition add name:"Gemastik XIX 2026" deadline:"2026-10-15 23:59" category:AI
+/competition list
+/competition list category:IoT
+/competition detail competition_id:12
+/competition delete competition_id:12
 ```
 
 Deadline ditulis dalam format `YYYY-MM-DD` atau `YYYY-MM-DD HH:MM` dan diproses sebagai WIB. Reminder otomatis berjalan setiap 30 menit. Penambahan dan penghapusan kompetisi memerlukan izin pengelola.

@@ -146,11 +146,12 @@ class HelpView(discord.ui.View):
             embed.add_field(
                 name="Interactive AI Chat & Memory",
                 value=(
-                    "`/tanya` atau mention Nexo : Ajukan pertanyaan dengan bahasa natural\n"
+                    "`/ask` or mention Nexo : Ask a question in natural language\n`/summarize` : Summarize recent channel messages within the safe context budget\n"
                     "`$reset` / `/reset` : Bersihkan memory di channel saat ini\n"
                     "`$tools` : Tampilkan seluruh tools lokal & MCP aktif\n"
-                    "`/token-stats` dan `/leaderboard-token` : Statistik token\n"
-                    "`$tokenstats` dan `$tokenleaderboard` : Alias prefix statistik token\n"
+                    "`/my-token-usage` : View your cumulative token totals\n"
+                    "`/server-token-leaderboard` : View cumulative server usage rankings\n"
+                    "`$tokenstats` and `$tokenleaderboard` : Prefix aliases for token usage\n"
                     "`$sync` : Sinkronisasi slash command (owner bot)"
                 ),
                 inline=False,
@@ -162,7 +163,7 @@ class HelpView(discord.ui.View):
                     "• **Google Calendar & Discord Events:** Buat, sync 2 arah, klasifikasi & reminder agenda\n"
                     "• **Interactive Polls:** Buat polling interaktif & hitung hasil suara\n"
                     "• **Voice & Forum:** Buat thread forum & cek anggota di voice channel\n"
-                    "• **Kompetisi:** Gunakan `/lomba add`, `/lomba list`, `/lomba detail`, dan `/lomba delete`"
+                    "• **Competitions:** Use `/competition add`, `/competition list`, `/competition detail`, and `/competition delete`"
                 ),
                 inline=False,
             )
@@ -590,9 +591,9 @@ class CoreCommands(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
     @app_commands.command(
-        name="help", description="Tampilkan panduan interaktif penggunaan Bot Nexo"
+        name="help", description="Open Nexo's interactive command guide."
     )
-    @app_commands.describe(command="Nama command/topik, contoh: say to atau lomba add")
+    @app_commands.describe(command="Command or topic to look up, such as `say to`.")
     async def help_slash(
         self, interaction: discord.Interaction, command: str | None = None
     ):
@@ -614,7 +615,7 @@ class CoreCommands(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
     @app_commands.command(
-        name="tools", description="Tampilkan seluruh tools lokal & MCP aktif saat ini"
+        name="tools", description="List active local Discord and MCP tools."
     )
     async def tools_slash(self, interaction: discord.Interaction):
         view = HelpView(self.bot, interaction.user.id)
@@ -826,23 +827,23 @@ class CoreCommands(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(
-        name="tag",
-        description="Kirim pesan kepada satu member yang dipilih secara langsung",
+        name="mention-member",
+        description="Post a message in this channel mentioning one selected member.",
     )
     @app_commands.describe(
-        target="Member yang akan diberi tahu",
-        pesan="Isi pesan yang ingin dikirim",
+        target="The member to mention.",
+        message="The message to post in this channel.",
     )
     @app_commands.checks.cooldown(
         1,
         10.0,
         key=lambda interaction: (interaction.guild_id or 0, interaction.user.id),
     )
-    async def tag_member(
+    async def mention_member(
         self,
         interaction: discord.Interaction,
         target: discord.Member,
-        pesan: str,
+        message: str,
     ):
         if not interaction.guild or not interaction.channel:
             await interaction.response.send_message(
@@ -856,13 +857,13 @@ class CoreCommands(commands.Cog):
                 ephemeral=True,
             )
             return
-        if not pesan.strip():
+        if not message.strip():
             await interaction.response.send_message(
                 "❌ Pesan tidak boleh kosong.",
                 ephemeral=True,
             )
             return
-        if "@everyone" in pesan.casefold() or "@here" in pesan.casefold():
+        if "@everyone" in message.casefold() or "@here" in message.casefold():
             await interaction.response.send_message(
                 "❌ Mention @everyone dan @here tidak diperbolehkan.",
                 ephemeral=True,
@@ -871,7 +872,7 @@ class CoreCommands(commands.Cog):
 
         try:
             await interaction.channel.send(
-                content=f"{target.mention} {pesan.strip()}",
+                content=f"{target.mention} {message.strip()}",
                 allowed_mentions=discord.AllowedMentions(
                     users=[target],
                     everyone=False,
@@ -889,7 +890,7 @@ class CoreCommands(commands.Cog):
                 ephemeral=True,
             )
         except discord.HTTPException:
-            logger.exception("Failed to send /tag message")
+            logger.exception("Failed to send /mention-member message")
             await interaction.response.send_message(
                 "❌ Pesan gagal dikirim karena Discord sedang bermasalah.",
                 ephemeral=True,

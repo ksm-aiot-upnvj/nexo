@@ -14,7 +14,7 @@ Contoh bantuan khusus:
 $help say
 $help say to
 $help say time
-$help lomba add
+$help competition add
 /help command: say to
 ```
 
@@ -38,13 +38,13 @@ Nexo, siapa itu John Doe?
 
 Nexo hanya menampilkan maksimal lima kandidat yang cocok. Pencarian ini tidak mengirim mention dan tidak mengirim pesan kepada siapa pun.
 
-Untuk mengirim pesan kepada member tertentu, gunakan `/tag` dan pilih target langsung dari daftar member Discord:
+Untuk mengirim pesan kepada member tertentu, gunakan `/mention-member` dan pilih target langsung dari daftar member Discord:
 
 ```text
-/tag target:@User pesan:"Tolong jangan lupa mandi!"
+/mention-member target:@User message:"Tolong jangan lupa mandi!"
 ```
 
-Ganti `@User` dengan mention member yang ingin ditag. Jika kamu ingin men-tag beberapa member, buat command `/tag` terpisah untuk masing-masing target.
+Ganti `@User` dengan mention member yang ingin ditag. Jika kamu ingin men-tag beberapa member, buat command `/mention-member` terpisah untuk masing-masing target.
 
 Pesan dikirim di channel tempat command dijalankan. Jika menggunakan percakapan AI, Nexo hanya boleh mengirim pesan ketika kamu secara jelas meminta Nexo untuk men-tag atau memberi tahu seseorang. Jika ada beberapa akun yang cocok, Nexo akan meminta kamu memilih target terlebih dahulu.
 
@@ -53,12 +53,13 @@ Pesan dikirim di channel tempat command dijalankan. Jika menggunakan percakapan 
 | Kebutuhan | Gunakan | Contoh |
 | --- | --- | --- |
 | Membuka bantuan | `$help` atau `/help` | `$help` |
-| Bertanya kepada Nexo | `/tanya` atau mention | `/tanya pertanyaan: Apa kabar project hidroponik?` |
+| Bertanya kepada Nexo | `/ask` atau mention | `/ask question: Apa kabar project hidroponik?` |
+| Merangkum pesan channel | `/summarize` | `/summarize message_limit:40` |
 | Memeriksa bot | `$ping` | `$ping` |
 | Melihat tools yang aktif | `$tools` atau `/tools` | `$tools` |
-| Melihat daftar channel | Mention Nexo atau `/tanya` | `Nexo, tampilkan daftar channel di server.` |
-| Mencari akun member | Mention Nexo atau `/tanya` | `Nexo, siapa itu John Doe?` |
-| Mengirim pesan dengan tag | `/tag` | `/tag target:@Cocolele pesan:"Tolong mandi!"` |
+| Melihat daftar channel | Mention Nexo atau `/ask` | `Nexo, tampilkan daftar channel di server.` |
+| Mencari akun member | Mention Nexo atau `/ask` | `Nexo, siapa itu John Doe?` |
+| Mengirim pesan dengan tag | `/mention-member` | `/mention-member target:@Cocolele message:"Tolong mandi!"` |
 | Melihat anggota voice channel | `$voice` atau `/voice` | `$voice Lab IoT` |
 | Menghapus ingatan percakapan | `$reset` atau `/reset` | `$reset` |
 
@@ -118,14 +119,14 @@ Kamu tidak perlu menghapus channel sementara secara manual. Jika channel masih k
 
 ## Melihat daftar channel server
 
-Nexo sudah memiliki kemampuan untuk menampilkan daftar channel di server melalui percakapan AI. Belum ada command `$channels` atau `/channels` khusus untuk fitur ini, jadi gunakan mention atau `/tanya`:
+Nexo sudah memiliki kemampuan untuk menampilkan daftar channel di server melalui percakapan AI. Belum ada command `$channels` atau `/channels` khusus untuk fitur ini, jadi gunakan mention atau `/ask`:
 
 ```text
 Nexo, tampilkan semua channel yang ada di server ini.
 ```
 
 ```text
-/tanya pertanyaan: Tolong tampilkan daftar channel teks, voice, dan stage di server.
+/ask question: Tolong tampilkan daftar channel teks, voice, dan stage di server.
 ```
 
 Nexo akan menampilkan nama, jenis, dan ID channel yang dapat diakses bot. Informasi ini berguna ketika kamu ingin memastikan nama channel sebelum menggunakan `$say` atau ingin menemukan channel voice tertentu.
