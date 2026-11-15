@@ -18,7 +18,7 @@ async def test_generate_dynamic_event_message_fallback_on_unsupported():
 @pytest.mark.asyncio
 async def test_generate_dynamic_event_message_fallback_on_exception():
     with patch(
-        "utils.mcp_client.ai_client.chat.completions.create",
+        "services.llm.client.ai_client.chat.completions.create",
         side_effect=Exception("LLM offline"),
     ):
         res = await generate_dynamic_event_message(
@@ -40,7 +40,7 @@ async def test_generate_dynamic_event_message_success_with_role():
     mock_response.choices = [mock_choice]
 
     with patch(
-        "utils.mcp_client.ai_client.chat.completions.create", new_callable=AsyncMock
+        "services.llm.client.ai_client.chat.completions.create", new_callable=AsyncMock
     ) as mock_create:
         mock_create.return_value = mock_response
         res = await generate_dynamic_event_message(

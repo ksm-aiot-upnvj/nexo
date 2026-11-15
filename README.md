@@ -108,7 +108,9 @@ nexo/
 │   ├── event_manager.py        # Logic pengingat, timezone WIB, pruning interval
 │   ├── gateway_server.py       # FastAPI server untuk menangani webhook GitHub
 │   ├── gcal_manager.py         # Klien Google Calendar API
-│   ├── mcp_client.py           # Klien LLM OpenAI-compatible & eksekutor tool MCP
+│   ├── agent/                  # Orkestrasi inference dan tool lokal/MCP
+│   ├── llm/                    # Klien provider LLM, konteks, dan token
+│   ├── mcp/                    # Klien transport MCP
 │   ├── schemas.py              # Pydantic models untuk AI tool calling
 │   └── template_renderer.py    # Engine rendering template Jinja2
 ├── services/                   # Konteks LLM, token counter, dan scheduling

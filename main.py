@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 
 from config.settings import settings
-from utils.mcp_client import check_services_health
+from services.service_health import check_services_health
 
 logging.basicConfig(
     level=logging.INFO,

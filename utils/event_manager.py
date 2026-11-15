@@ -271,7 +271,7 @@ async def generate_dynamic_event_message(
         return fallback_text
 
     try:
-        from utils.mcp_client import ai_client
+        from services.llm.client import ai_client
 
         async def _call_llm():
             response = await ai_client.chat.completions.create(
