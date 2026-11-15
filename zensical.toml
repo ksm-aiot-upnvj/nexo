@@ -19,6 +19,7 @@ nav = [
         { "Arsitektur umum" = "architecture.md" },
         { "Auto scheduling" = "scheduling.md" },
         { "Chatbot LLM" = "llm.md" },
+        { "Credential monitoring" = "security-monitoring.md" },
         { "Tools Discord" = "discord-tools.md" },
         { "GitHub Webhook" = "github-webhook.md" },
     ] },
