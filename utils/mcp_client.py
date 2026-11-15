@@ -22,6 +22,7 @@ from services.llm.token_counter import (
     get_prompt_estimate_safety_margin,
     record_prompt_token_usage,
 )
+from utils.metrics import LLM_REQUEST_DURATION, LLM_REQUESTS
 
 logger = logging.getLogger("mcp_client")
 WIB = timezone(timedelta(hours=7))
@@ -49,6 +50,7 @@ ai_client = AsyncOpenAI(
     base_url=LLM_BASE_URL,
     api_key=LLM_API_KEY or "sk-no-key",
     timeout=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+    max_retries=settings.LLM_MAX_RETRIES,
 )
 
 
@@ -780,31 +782,39 @@ async def process_with_mcp_tools(
         and isinstance(tool.get("function"), dict)
         and isinstance(tool["function"].get("name"), str)
     }
-    for iteration in range(max_iterations):
-        kwargs = {
-            "model": LLM_MODEL_NAME,
-            "messages": messages,
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "max_completion_tokens": MAX_COMPLETION_TOKENS,
-        }
-        # On the last iteration, omit tools to force the model to summarize existing data into text
-        if sanitized_tools and iteration < (max_iterations - 1):
-            kwargs["tools"] = sanitized_tools
-            # Chat Completions providers reject reasoning models with tools
-            # unless reasoning is explicitly disabled.
-            kwargs["reasoning_effort"] = "none"
+    try:
+        for iteration in range(max_iterations):
+            kwargs = {
+                "model": LLM_MODEL_NAME,
+                "messages": messages,
+                "temperature": 0.7,
+                "top_p": 0.95,
+                "max_completion_tokens": MAX_COMPLETION_TOKENS,
+            }
+            # On the last iteration, omit tools to force the model to summarize existing data into text
+            if sanitized_tools and iteration < (max_iterations - 1):
+                kwargs["tools"] = sanitized_tools
+                # Chat Completions providers reject reasoning models with tools
+                # unless reasoning is explicitly disabled.
+                kwargs["reasoning_effort"] = "none"
 
-        estimated_prompt_tokens = await _trim_history_for_request(
-            messages,
-            current_user_message,
-            kwargs.get("tools", []),
-            context_window,
-            MAX_COMPLETION_TOKENS,
-        )
+            estimated_prompt_tokens = await _trim_history_for_request(
+                messages,
+                current_user_message,
+                kwargs.get("tools", []),
+                context_window,
+                MAX_COMPLETION_TOKENS,
+            )
 
-        try:
-            response = await ai_client.chat.completions.create(**kwargs)
+            inference_started = time.perf_counter()
+            try:
+                response = await ai_client.chat.completions.create(**kwargs)
+                LLM_REQUESTS.labels("success").inc()
+            except Exception:
+                LLM_REQUESTS.labels("failure").inc()
+                raise
+            finally:
+                LLM_REQUEST_DURATION.observe(time.perf_counter() - inference_started)
 
             # Accumulate token usage from response if available
             if hasattr(response, "usage") and response.usage:
@@ -996,15 +1006,15 @@ async def process_with_mcp_tools(
                 }
                 return reply, used_tools, usage_data, elapsed_s
 
-        except Exception:
-            logger.exception("Unexpected error in process_with_mcp_tools")
-            elapsed_s = time.perf_counter() - start_time
-            return (
-                "Nexo encountered a technical issue while processing this request. Please try again shortly. 🤖",
-                False,
-                {},
-                elapsed_s,
-            )
+    except Exception:
+        logger.exception("Unexpected error in process_with_mcp_tools")
+        elapsed_s = time.perf_counter() - start_time
+        return (
+            "Nexo encountered a technical issue while processing this request. Please try again shortly. 🤖",
+            False,
+            {},
+            elapsed_s,
+        )
 
     elapsed_s = time.perf_counter() - start_time
     return (
