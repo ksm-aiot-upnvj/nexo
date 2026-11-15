@@ -85,13 +85,6 @@ class AgentOrchestrator(commands.Cog):
                 all_tools.extend(self.bot.cached_mcp_tools)
 
             sanitized = sanitize_tools_list(all_tools) if all_tools else []
-            for s in sanitized:
-                function = s.get("function", {})
-                logger.info(
-                    "Registered tool schema (name=%s, description=%s)",
-                    function.get("name"),
-                    function.get("description"),
-                )
             tools_json_str = json.dumps(sanitized)
 
             sys_tok = await count_token(SYSTEM_PROMPT)
