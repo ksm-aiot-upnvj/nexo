@@ -92,6 +92,7 @@ async def main():
             "cogs.server_events",
             "cogs.webhook_deploy",
             "cogs.competition_radar",
+            "cogs.security_monitor",
         ]
 
         for cog in cogs_to_load:
