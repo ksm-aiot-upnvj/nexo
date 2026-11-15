@@ -28,6 +28,7 @@ from utils.mcp_client import (
     get_tools_from_mcp_server,
     process_with_mcp_tools,
     sanitize_tools_list,
+    warm_up_llm,
 )
 
 logger = logging.getLogger("agent_orchestrator")
@@ -50,6 +51,8 @@ class AgentOrchestrator(commands.Cog):
         self._mention_cooldowns: dict[int, float] = {}
         self._mcp_refresh_task: asyncio.Task | None = None
         self._mcp_refresh_retry_after = 0.0
+        self._llm_warmup_task: asyncio.Task | None = None
+        self._llm_warmup_started = False
 
     async def cog_load(self):
         # Ensure queue and lock exist on bot
@@ -107,6 +110,19 @@ class AgentOrchestrator(commands.Cog):
             self.worker_task.cancel()
         if self._mcp_refresh_task:
             self._mcp_refresh_task.cancel()
+        if self._llm_warmup_task:
+            self._llm_warmup_task.cancel()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self._llm_warmup_started:
+            return
+        self._llm_warmup_started = True
+        self._llm_warmup_task = asyncio.create_task(self._run_llm_warmup())
+
+    async def _run_llm_warmup(self):
+        async with self.bot.bot_lock:
+            await warm_up_llm()
 
     def _schedule_mcp_tools_refresh(self):
         """Refresh optional MCP tools in the background without blocking chat."""

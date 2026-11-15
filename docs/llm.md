@@ -65,3 +65,5 @@ berjalan tanpa akses jaringan ke Hugging Face.
 Status provider memanggil endpoint `/models` melalui library `openai` /
 `AsyncOpenAI`. Dengan begitu, pengecekan tidak perlu menghasilkan output model
 dan tidak bergantung pada endpoint `/health` khusus llama.cpp.
+
+Setelah Discord bot siap, Nexo mengirim satu inference warm-up dengan prompt tetap dan batas satu token keluaran. Warm-up berjalan sekali per proses di bawah LLM lock, hanya mencatat jenis error jika gagal, dan dapat dihitung sebagai penggunaan provider. Warm-up startup tidak mencegah provider melepas model setelah idle.

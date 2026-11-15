@@ -54,6 +54,35 @@ ai_client = AsyncOpenAI(
 )
 
 
+async def warm_up_llm() -> bool:
+    """Run a tiny inference request to load the configured model into its runtime."""
+    started_at = time.perf_counter()
+    timeout = min(settings.LLM_REQUEST_TIMEOUT_SECONDS, 150.0)
+
+    try:
+        client = ai_client.with_options(timeout=timeout, max_retries=0)
+        await client.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[{"role": "user", "content": "Reply with OK."}],
+            max_completion_tokens=1,
+            temperature=0,
+        )
+    except Exception as error:  # noqa: BLE001
+        logger.warning(
+            "LLM inference warm-up failed (model=%s, error_type=%s)",
+            LLM_MODEL_NAME,
+            type(error).__name__,
+        )
+        return False
+
+    logger.info(
+        "LLM inference warm-up completed (model=%s, elapsed_seconds=%.2f)",
+        LLM_MODEL_NAME,
+        time.perf_counter() - started_at,
+    )
+    return True
+
+
 def sanitize_parameters(schema: dict) -> dict:
     """
     Recursively sanitizes JSON schema parameters:
