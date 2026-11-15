@@ -25,6 +25,7 @@ ai_client = AsyncOpenAI(
     base_url=LLM_BASE_URL,
     api_key=LLM_API_KEY or "sk-no-key",
     timeout=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+    max_retries=settings.LLM_MAX_RETRIES,
 )
 
 MAX_COMPLETION_TOKENS = 1024
@@ -379,6 +380,13 @@ def record_prompt_token_usage(local_estimate: int, provider_usage: int) -> int:
             max(128, observed_p95 + 64),
         )
     return gap
+
+
+async def count_chat_messages(messages: list[dict[str, str]]) -> int:
+    """Count serialized chat messages with the configured model tokenizer/template."""
+    tokenizer_model = await _resolve_tokenizer_model()
+    tokenizer = await asyncio.to_thread(_get_tokenizer, tokenizer_model)
+    return await asyncio.to_thread(tokenizer.count_chat_tokens, messages)
 
 
 async def count_token(text_content: str) -> int:
