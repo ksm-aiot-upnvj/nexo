@@ -6,15 +6,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from utils import mcp_client
-from utils.mcp_client import (
+from services.agent import orchestrator as agent_orchestrator
+from services.agent.orchestrator import (
     _append_tool_results,
     _execute_tool_calls,
     _log_prompt_token_comparison,
+)
+from services.agent.tool_schema import (
     _validate_schema_value,
     _validate_tool_arguments,
     sanitize_tools_list,
 )
+from services.llm import client as llm_client
+from services.mcp import client as mcp_client
 from utils.schemas import DiscordEventSchema
 
 
@@ -146,7 +150,7 @@ def test_tool_argument_schema_validation_checks_required_types_and_extra_fields(
 
 
 def test_prompt_token_estimate_delta_is_logged(caplog):
-    with caplog.at_level("INFO", logger="mcp_client"):
+    with caplog.at_level("INFO", logger="agent_orchestrator"):
         delta = _log_prompt_token_comparison(
             iteration=2, local_estimate=500, provider_usage=537
         )
@@ -163,14 +167,16 @@ async def test_request_budget_trims_oldest_history_and_rejects_unfit_prompt(
     async def count_characters(text):
         return len(text)
 
-    monkeypatch.setattr(mcp_client, "count_token", count_characters)
-    monkeypatch.setattr(mcp_client, "get_prompt_estimate_safety_margin", lambda: 0)
+    monkeypatch.setattr(agent_orchestrator, "count_token", count_characters)
+    monkeypatch.setattr(
+        agent_orchestrator, "get_prompt_estimate_safety_margin", lambda: 0
+    )
     system_message = {"role": "system", "content": "base"}
     old_message = {"role": "user", "content": "old " * 30}
     current_user_message = {"role": "user", "content": "current"}
     messages = [system_message, old_message, current_user_message]
 
-    estimate = await mcp_client._trim_history_for_request(
+    estimate = await agent_orchestrator._trim_history_for_request(
         messages, current_user_message, [], context_window=100, completion_reserve=0
     )
 
@@ -180,7 +186,7 @@ async def test_request_budget_trims_oldest_history_and_rejects_unfit_prompt(
     oversized_prompt = {"role": "user", "content": "question " * 30}
     messages = [system_message, oversized_prompt]
     with pytest.raises(ValueError, match="exceed the model input budget"):
-        await mcp_client._trim_history_for_request(
+        await agent_orchestrator._trim_history_for_request(
             messages, oversized_prompt, [], context_window=100, completion_reserve=0
         )
 
@@ -192,8 +198,10 @@ async def test_large_tool_result_uses_remaining_context_and_keeps_json_valid(
     async def count_characters(text):
         return len(text)
 
-    monkeypatch.setattr(mcp_client, "count_token", count_characters)
-    monkeypatch.setattr(mcp_client, "get_prompt_estimate_safety_margin", lambda: 0)
+    monkeypatch.setattr(agent_orchestrator, "count_token", count_characters)
+    monkeypatch.setattr(
+        agent_orchestrator, "get_prompt_estimate_safety_margin", lambda: 0
+    )
     system_message = {"role": "system", "content": "system"}
     old_history = {"role": "user", "content": "old history " * 35}
     current_user_message = {"role": "user", "content": "current question"}
@@ -212,7 +220,7 @@ async def test_large_tool_result_uses_remaining_context_and_keeps_json_valid(
         tool_result,
     ]
 
-    estimate = await mcp_client._trim_history_for_request(
+    estimate = await agent_orchestrator._trim_history_for_request(
         messages,
         current_user_message,
         [],
@@ -261,14 +269,14 @@ async def test_llm_health_check_caches_success_until_ttl_expires(monkeypatch):
     client = MagicMock()
     client.models.list = AsyncMock()
     with_options = MagicMock(return_value=client)
-    monkeypatch.setattr(mcp_client.time, "monotonic", lambda: now[0])
-    monkeypatch.setattr(mcp_client.ai_client, "with_options", with_options)
-    monkeypatch.setattr(mcp_client, "_LLM_HEALTH_CACHE", None)
+    monkeypatch.setattr(llm_client.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(llm_client.ai_client, "with_options", with_options)
+    monkeypatch.setattr(llm_client, "_LLM_HEALTH_CACHE", None)
 
-    assert await mcp_client.check_llm_health() == (True, "LLM provider is online")
-    assert await mcp_client.check_llm_health() == (True, "LLM provider is online")
+    assert await llm_client.check_llm_health() == (True, "LLM provider is online")
+    assert await llm_client.check_llm_health() == (True, "LLM provider is online")
     assert client.models.list.await_count == 1
 
-    now[0] += mcp_client.LLM_HEALTH_CACHE_TTL_SECONDS + 1
-    assert await mcp_client.check_llm_health() == (True, "LLM provider is online")
+    now[0] += llm_client.LLM_HEALTH_CACHE_TTL_SECONDS + 1
+    assert await llm_client.check_llm_health() == (True, "LLM provider is online")
     assert client.models.list.await_count == 2

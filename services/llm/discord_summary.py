@@ -7,12 +7,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from config.settings import settings
+from services.llm.client import SYSTEM_PROMPT, ai_client
 from services.llm.token_counter import (
     MAX_COMPLETION_TOKENS,
     count_chat_messages,
     get_context_budget,
 )
-from utils.mcp_client import SYSTEM_PROMPT, ai_client
 from utils.metrics import LLM_REQUEST_DURATION, LLM_REQUESTS
 
 logger = logging.getLogger(__name__)

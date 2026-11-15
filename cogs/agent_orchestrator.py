@@ -15,21 +15,21 @@ from db.repositories.token_usage import (
     get_guild_token_leaderboard,
     get_user_token_stats,
 )
+from services.agent.orchestrator import process_with_mcp_tools
+from services.agent.tool_schema import sanitize_tools_list
+from services.llm.client import (
+    SYSTEM_PROMPT,
+    ai_client,
+    check_llm_health,
+    warm_up_llm,
+)
 from services.llm.context import check_and_trigger_rolling_summary
 from services.llm.discord_summary import (
     SummaryContextTooLarge,
     summarize_messages,
 )
 from services.llm.token_counter import count_token
-from utils.mcp_client import (
-    SYSTEM_PROMPT,
-    ai_client,
-    check_llm_health,
-    get_tools_from_mcp_server,
-    process_with_mcp_tools,
-    sanitize_tools_list,
-    warm_up_llm,
-)
+from services.mcp.client import get_tools_from_mcp_server
 
 logger = logging.getLogger("agent_orchestrator")
 QUEUE_STATUS_EDIT_DELAY_SECONDS = 1.1
