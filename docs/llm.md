@@ -2,6 +2,14 @@
 
 Percakapan dapat dimulai dengan mention atau `/ask`. Nexo memeriksa kesehatan provider LLM, menaruh pertanyaan ke `message_queue`, lalu memberi tahu posisi antrean jika ada permintaan lain. Satu worker mengambil item antrean dan memakai lock bot agar pemrosesan berjalan teratur.
 
+Saat worker mulai menangani satu permintaan, Nexo menghitung ulang posisi
+permintaan yang tersisa dan memperbarui pesan statusnya. Edit status dijalankan
+berurutan dengan jeda 1,1 detik untuk menghindari burst request ke Discord.
+Untuk `/summarize`, log mencatat jumlah pesan yang diminta dan diperiksa,
+perkiraan token seluruh cakupan, budget input aman, jumlah pesan utuh yang
+dimasukkan, serta token aktual dari provider jika tersedia. Jika batas konteks
+membatasi cakupan, respons menyebut jumlah pesan yang benar-benar diringkas.
+
 Sebelum worker dipakai, Nexo memuat system prompt dari `prompts/system_prompt.md`, mengambil daftar tools MCP melalui SSE, menggabungkannya dengan local Discord tools, lalu membersihkan schema JSON agar ukuran konteks lebih kecil. Riwayat percakapan dibaca dari database dengan scope pasangan pengguna dan channel. Pesan dari channel atau pengguna lain tidak ikut menjadi konteks conversation tersebut.
 
 ```mermaid
@@ -66,4 +74,10 @@ Status provider memanggil endpoint `/models` melalui library `openai` /
 `AsyncOpenAI`. Dengan begitu, pengecekan tidak perlu menghasilkan output model
 dan tidak bergantung pada endpoint `/health` khusus llama.cpp.
 
-Setelah Discord bot siap, Nexo mengirim satu inference warm-up dengan prompt tetap dan batas satu token keluaran. Warm-up berjalan sekali per proses di bawah LLM lock, hanya mencatat jenis error jika gagal, dan dapat dihitung sebagai penggunaan provider. Warm-up startup tidak mencegah provider melepas model setelah idle.
+Setelah Discord bot siap, Nexo juga mengirim satu inference warm-up dengan prompt
+tetap dan batas satu token keluaran. Ini membantu provider memuat model sebelum
+permintaan pengguna pertama. Warm-up berjalan sekali per proses, memakai lock
+LLM agar tidak bersamaan dengan pekerjaan antrean, dan hanya mencatat jenis
+error jika gagal. Request kecil ini dapat tetap dihitung sebagai penggunaan
+provider. Warm-up startup tidak mencegah model dimuat ulang jika provider
+melepasnya setelah idle.

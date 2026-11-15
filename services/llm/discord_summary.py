@@ -33,6 +33,7 @@ class SummaryContextMetadata(BaseModel):
     scan_cap_reached: bool
     first_included_at: datetime | None
     last_included_at: datetime | None
+    requested_prompt_tokens: int
     prompt_tokens: int
     safe_input_budget: int
 
@@ -40,9 +41,10 @@ class SummaryContextMetadata(BaseModel):
         notes = []
         if self.excluded_from_scanned:
             notes.append(
-                f"I summarized {self.included_count} of {self.scanned_count} "
-                "messages checked; older messages were excluded to stay within "
-                "the safe context budget."
+                f"The requested scope of up to {self.requested_limit or self.scanned_count} "
+                "messages exceeds the safe context limit; I processed the "
+                f"{self.included_count} newest complete messages out of "
+                f"{self.scanned_count} checked."
             )
         if self.scan_cap_reached and self.requested_limit is None:
             notes.append(
@@ -117,22 +119,35 @@ async def build_summary_context(
         context_window - MAX_COMPLETION_TOKENS,
     )
 
-    selected_records: list[dict[str, str]] = []
-    selected_messages: list[Any] = []
-    selected_prompt_tokens = 0
-    for message in candidate_messages:
-        candidate_messages_newest_first = [*selected_messages, message]
-        candidate_records_chronological = [
-            _message_record(item) for item in reversed(candidate_messages_newest_first)
-        ]
-        token_count = await count_chat_messages(
-            _prompt_messages(candidate_records_chronological)
-        )
-        if token_count > safe_input_budget:
-            break
-        selected_messages = candidate_messages_newest_first
-        selected_records = candidate_records_chronological
-        selected_prompt_tokens = token_count
+    requested_records = [
+        _message_record(message) for message in reversed(candidate_messages)
+    ]
+    requested_prompt_tokens = await count_chat_messages(
+        _prompt_messages(requested_records)
+    )
+
+    if requested_prompt_tokens <= safe_input_budget:
+        selected_records = requested_records
+        selected_messages = list(candidate_messages)
+        selected_prompt_tokens = requested_prompt_tokens
+    else:
+        selected_records = []
+        selected_messages = []
+        selected_prompt_tokens = 0
+        for message in candidate_messages:
+            candidate_messages_newest_first = [*selected_messages, message]
+            candidate_records_chronological = [
+                _message_record(item)
+                for item in reversed(candidate_messages_newest_first)
+            ]
+            token_count = await count_chat_messages(
+                _prompt_messages(candidate_records_chronological)
+            )
+            if token_count > safe_input_budget:
+                break
+            selected_messages = candidate_messages_newest_first
+            selected_records = candidate_records_chronological
+            selected_prompt_tokens = token_count
 
     if not selected_messages:
         raise SummaryContextTooLarge(
@@ -154,8 +169,19 @@ async def build_summary_context(
         ),
         first_included_at=min(included_times) if included_times else None,
         last_included_at=max(included_times) if included_times else None,
+        requested_prompt_tokens=requested_prompt_tokens,
         prompt_tokens=selected_prompt_tokens,
         safe_input_budget=safe_input_budget,
+    )
+    logger.info(
+        "Summary context budget evaluated (requested_limit=%s, messages_scanned=%s, requested_prompt_tokens=%s, safe_input_budget=%s, messages_included=%s, messages_excluded=%s, included_prompt_tokens=%s)",
+        requested_limit or settings.SUMMARY_SCAN_LIMIT,
+        metadata.scanned_count,
+        metadata.requested_prompt_tokens,
+        metadata.safe_input_budget,
+        metadata.included_count,
+        metadata.excluded_from_scanned,
+        metadata.prompt_tokens,
     )
     return _prompt_messages(selected_records), metadata
 
@@ -196,9 +222,11 @@ async def summarize_messages(
         "completion_tokens": getattr(response.usage, "completion_tokens", 0) or 0,
     }
     logger.info(
-        "Discord summary completed (messages_included=%s, messages_scanned=%s, estimated_prompt_tokens=%s)",
+        "Discord summary completed (messages_included=%s, messages_scanned=%s, estimated_prompt_tokens=%s, actual_prompt_tokens=%s, actual_completion_tokens=%s)",
         metadata.included_count,
         metadata.scanned_count,
         metadata.prompt_tokens,
+        usage["prompt_tokens"],
+        usage["completion_tokens"],
     )
     return reply, metadata, usage
