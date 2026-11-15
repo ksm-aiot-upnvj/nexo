@@ -88,6 +88,7 @@ async def main():
         # Load all local Cogs
         cogs_to_load = [
             "cogs.core_commands",
+            "cogs.web_search",
             "cogs.agent_orchestrator",
             "cogs.server_events",
             "cogs.webhook_deploy",
