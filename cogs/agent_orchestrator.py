@@ -32,6 +32,7 @@ from utils.mcp_client import (
 )
 
 logger = logging.getLogger("agent_orchestrator")
+QUEUE_STATUS_EDIT_DELAY_SECONDS = 1.1
 
 
 @dataclass(slots=True)
@@ -42,6 +43,7 @@ class QueuedLLMRequest:
     status_message: object | None = None
     kind: str = "chat"
     options: dict = field(default_factory=dict)
+    last_queue_position: int | None = None
 
 
 class AgentOrchestrator(commands.Cog):
@@ -51,6 +53,10 @@ class AgentOrchestrator(commands.Cog):
         self._mention_cooldowns: dict[int, float] = {}
         self._mcp_refresh_task: asyncio.Task | None = None
         self._mcp_refresh_retry_after = 0.0
+        self._pending_requests: list[QueuedLLMRequest] = []
+        self._queue_positions_dirty = False
+        self._queue_position_refresh_task: asyncio.Task | None = None
+        self._queue_status_lock = asyncio.Lock()
         self._llm_warmup_task: asyncio.Task | None = None
         self._llm_warmup_started = False
 
@@ -110,6 +116,8 @@ class AgentOrchestrator(commands.Cog):
             self.worker_task.cancel()
         if self._mcp_refresh_task:
             self._mcp_refresh_task.cancel()
+        if self._queue_position_refresh_task:
+            self._queue_position_refresh_task.cancel()
         if self._llm_warmup_task:
             self._llm_warmup_task.cancel()
 
@@ -151,7 +159,69 @@ class AgentOrchestrator(commands.Cog):
             self.bot.message_queue.put_nowait(request)
         except asyncio.QueueFull:
             return False
+        self._pending_requests.append(request)
         return True
+
+    def _mark_request_started(self, request: object) -> None:
+        if isinstance(request, QueuedLLMRequest):
+            self._pending_requests = [
+                pending for pending in self._pending_requests if pending is not request
+            ]
+        self._schedule_queue_position_refresh()
+
+    def _schedule_queue_position_refresh(self) -> None:
+        self._queue_positions_dirty = True
+        if (
+            self._queue_position_refresh_task is None
+            or self._queue_position_refresh_task.done()
+        ):
+            self._queue_position_refresh_task = asyncio.create_task(
+                self._refresh_queue_positions()
+            )
+
+    async def _refresh_queue_positions(self) -> None:
+        while self._queue_positions_dirty:
+            self._queue_positions_dirty = False
+            pending_requests = tuple(self._pending_requests)
+            edits_sent = 0
+            for position, request in enumerate(pending_requests, start=1):
+                if (
+                    request.last_queue_position is None
+                    or request.last_queue_position == position
+                    or not any(pending is request for pending in self._pending_requests)
+                ):
+                    continue
+                if edits_sent:
+                    await asyncio.sleep(QUEUE_STATUS_EDIT_DELAY_SECONDS)
+                if not any(pending is request for pending in self._pending_requests):
+                    continue
+
+                status_text = (
+                    f"⏳ Your summary is queued at position #{position}."
+                    if request.kind == "summary"
+                    else "⏳ *Your question is currently queued at "
+                    f"position #{position}. Please wait a moment!*"
+                )
+                try:
+                    async with self._queue_status_lock:
+                        if isinstance(request.context, discord.Interaction):
+                            await request.context.edit_original_response(
+                                content=status_text
+                            )
+                        elif request.status_message:
+                            await request.status_message.edit(content=status_text)
+                        else:
+                            request.last_queue_position = None
+                            continue
+                except (discord.NotFound, discord.HTTPException) as error:
+                    logger.debug(
+                        "Could not refresh queued request position (error_type=%s)",
+                        type(error).__name__,
+                    )
+                    continue
+
+                request.last_queue_position = position
+                edits_sent += 1
 
     async def worker(self):
         """Constantly watches the queue and processes requests one by one with guaranteed lifecycle and recovery"""
@@ -163,6 +233,8 @@ class AgentOrchestrator(commands.Cog):
                 break
 
             try:
+                self._mark_request_started(queue_item)
+
                 request_kind = "chat"
                 request_options = {}
                 if isinstance(queue_item, QueuedLLMRequest):
@@ -191,18 +263,19 @@ class AgentOrchestrator(commands.Cog):
 
                     if not is_expired:
                         try:
-                            if is_interaction:
-                                await ctx_obj.edit_original_response(
-                                    content="*Nexo is thinking... 💭*"
-                                )
-                            elif queue_status_msg:
-                                wait_msg = await queue_status_msg.edit(
-                                    content="*Nexo is thinking... 💭*"
-                                )
-                            else:
-                                wait_msg = await ctx_obj.reply(
-                                    "*Nexo is thinking... 💭*"
-                                )
+                            async with self._queue_status_lock:
+                                if is_interaction:
+                                    await ctx_obj.edit_original_response(
+                                        content="*Nexo is thinking... 💭*"
+                                    )
+                                elif queue_status_msg:
+                                    wait_msg = await queue_status_msg.edit(
+                                        content="*Nexo is thinking... 💭*"
+                                    )
+                                else:
+                                    wait_msg = await ctx_obj.reply(
+                                        "*Nexo is thinking... 💭*"
+                                    )
                         except discord.NotFound, discord.HTTPException:
                             is_expired = True
 
@@ -427,6 +500,7 @@ class AgentOrchestrator(commands.Cog):
                 context=interaction,
                 prompt=question,
                 queued_at=time.time(),
+                last_queue_position=position if position > 0 else None,
             )
         ):
             await interaction.edit_original_response(
@@ -469,6 +543,7 @@ class AgentOrchestrator(commands.Cog):
                 queued_at=time.time(),
                 kind="summary",
                 options={"message_limit": message_limit},
+                last_queue_position=position if position > 0 else None,
             )
         ):
             await interaction.edit_original_response(
@@ -889,6 +964,7 @@ class AgentOrchestrator(commands.Cog):
                         prompt=final_prompt,
                         queued_at=time.time(),
                         status_message=queue_status_msg,
+                        last_queue_position=position if position > 0 else None,
                     )
                 ):
                     full_message = (
