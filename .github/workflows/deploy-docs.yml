@@ -49,11 +49,11 @@ jobs:
 
       # Memasang dependensi secara otomatis (Aturan exclude-newer 7 hari otomatis berjalan di sini)
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --only-group docs
 
       # Menjalankan Zensical build via uv run agar menggunakan environment yang terisolasi
       - name: Build documentation
-        run: uv run zensical build --clean
+        run: uv run --no-sync zensical build --clean
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
