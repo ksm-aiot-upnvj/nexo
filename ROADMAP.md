@@ -118,7 +118,7 @@ Berdasarkan pertimbangan perangkat keras (4 Core CPU, sisa RAM 5 GB), pengembang
 - [ ] Implementasi **Parallel Tool Execution** menggunakan `asyncio.gather` saat model mengeluarkan lebih dari satu tool call serentak.
 
 **DISCORD COGS & USER FEATURES**
-- [x] Pembuatan Cog *Community*: Sistem Onboarding (auto-role & welcome message) dan Absensi Voice Channel (`check_voice_channel`, `$vc`, `/voice`).
+- [x] Pembuatan Cog *Community*: Sistem Onboarding (auto-role & welcome message) dan Absensi Voice Channel (`list_voice_channel_members`, `$vc`, `/voice`).
 - [x] Pembuatan Cog *Utilities*: Polling dinamis (`create_discord_poll`), Manajemen *Discord Threads* (pembuatan & auto-archive), dan Perintah Reset Konteks Memori (`$reset`, `/reset`).
 - [x] Pembuatan Cog *Webhook & Deployment*: FastAPI Gateway (`/webhook`), Jinja2 embed notification, dan otomatisasi Docker Compose Deployment (`cogs/webhook_deploy.py`).
 - [x] Pembuatan Cog *Scheduler & Events Lifecycle*:
@@ -132,13 +132,35 @@ Berdasarkan pertimbangan perangkat keras (4 Core CPU, sisa RAM 5 GB), pengembang
 - [ ] **Interactive Role Picker & Onboarding Divisi** (Koordinasi Divisi PSDM): Implementasi persistent UI View (Select Menu/Buttons) untuk self-assign role divisi anggota baru.
 - [ ] **AI Weekly Standup & Progress Summarizer** (Gemma 4): Pipeline ekstraksi progres divisi mingguan dan automated executive summary untuk BPH / Ketua KSM.
 - [ ] **Scheduled Announcement (`$say` Scheduler)**: Dukungan pengiriman pengumuman terjadwal berbasis parameter `--time` atau `--in` (WIB).
-- [ ] **Competition & Hackathon Radar (`/lomba`)**: Manajemen info lomba/kompetisi AI & IoT dengan sistem countdown reminder berkala (H-7, H-3, H-1).
+- [ ] **Competition & Hackathon Radar (`/competition`)**: Manajemen info lomba/kompetisi AI & IoT dengan sistem countdown reminder berkala (H-7, H-3, H-1).
 - [ ] (Future) Pembuatan *tool* eksekusi fisik (contoh: MQTT *publish* ke relay ESP32) berserta *role permission checker*.
 
 **WEB UI DASHBOARD (ADMIN PANEL)**
 - [ ] Rancang dan bangun **Web Dashboard GUI** untuk memanajemen konfigurasi Nexo tanpa harus menyentuh kode.
 - [ ] **Knowledge Base Manager**: Fitur UI untuk *upload*, hapus, dan kelola dokumen/materi yang akan masuk ke sistem RAG (Vektor DB).
 - [ ] **MCP Server Manager**: Fitur antarmuka untuk menambahkan, mengedit, atau menghapus berbagai *endpoint URL* MCP Server IoT secara dinamis dan menyimpannya langsung ke database.
+
+### Backlog Peningkatan Ketahanan dan Pemanfaatan Model
+
+Status mencerminkan progres implementasi yang sudah diperiksa. `slow_purge` menghapus pesan berumur kurang dari 14 hari dalam batch maksimal 100, serta menghapus pesan yang lebih lama satu per satu.
+
+| # | Prioritas | Usulan | Manfaat / catatan | Status |
+| :---: | :---: | :--- | :--- | :---: |
+| 1 | P1 | Batasi maksimum permintaan tool `delete_channel_messages` menjadi 100 pesan | Default dan batas maksimum tool sama-sama 100; pesan lama tetap dihapus satu per satu. | ✅ Done |
+| 2 | P1 | Tambahkan retry terbatas dengan jeda bertahap untuk layanan eksternal | Retry SDK LLM dibatasi; efek webhook memakai backoff eksponensial dengan maksimum percobaan yang dapat dikonfigurasi. | ✅ Done |
+| 3 | P1 | Terapkan idempotensi pada webhook dan pekerjaan yang bisa diulang | Kunci effect stabil mencegah enqueue ganda saat GitHub mengirim ulang delivery yang sama. | ✅ Done |
+| 4 | P2 | Tambahkan pemulihan pekerjaan yang macet dalam status `processing` | Lease kedaluwarsa memungkinkan worker mengambil pekerjaan kembali setelah restart. | ✅ Done |
+| 5 | P2 | Rancang persistent outbox berbasis database | Job webhook tersimpan secara durable bersama status, retry, dan pencegahan duplikasi. | ✅ Done |
+| 6 | P2 | Tambahkan metrik operasional dan ekspor yang kompatibel dengan **Prometheus** | Endpoint `/metrics` menampilkan request HTTP, webhook/outbox, dan durasi/error inference LLM. | ✅ Done |
+| 7 | P2 | Sediakan ringkasan diskusi Discord berdasarkan permintaan, misalnya `/summarize` | `/summarize` menghitung prompt aman dan mengambil pesan utuh terbaru; opsi `message_limit` opsional membatasi jumlah pesan yang diperiksa. | ✅ Done |
+| 8 | P2 | Sediakan bantuan membaca error/log di channel developer | Nexo membawa konteks pesan yang di-reply beserta metadata sumber saat disebut; isi pesan diperlakukan sebagai data tidak tepercaya. | ✅ Done |
+| 9 | P2 | Bangun tanya jawab dokumentasi internal dengan RAG | Memerlukan kurasi dan pengindeksan dokumen KSM/Nexo. | ⬜ Open |
+| 10 | P3 | Tambahkan analisis gambar/screenshot sesuai permintaan | Memerlukan dukungan input gambar di runtime Nexo. | ⬜ Open |
+| 11 | P3 | Evaluasi transkripsi/ringkasan audio | Integrasi bergantung pada format input dan dukungan runtime. | ⬜ Open |
+| 12 | P3 | Pisahkan health check menjadi liveness dan readiness | Endpoint `/nexo/health/live` dan `/nexo/health/ready` tersedia. | ✅ Done |
+| 13 | P3 | Tambahkan timeout dan batas konkurensi untuk pekerjaan | Batas antrean dan timeout request/job LLM dikonfigurasi melalui environment variables. | ✅ Done |
+| 14 | P3 | Uji skenario pemulihan saat restart dan kegagalan layanan | Test memeriksa pengambilan ulang lease kedaluwarsa, retry terbatas, kegagalan terminal, serta status delivery akhir. | ✅ Done |
+| 15 | P2 | Standarkan nama Discord tools dan slash commands dalam bahasa Inggris | Tool dan opsi kompetisi memakai nama yang eksplisit; token pribadi dibedakan dari leaderboard server. | ✅ Done |
 
 ---
 
