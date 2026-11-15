@@ -19,25 +19,25 @@ from utils.schemas import (
 
 TOOL_NAMES = {
     "list_discord_events",
-    "create_discord_event",
+    "schedule_discord_event",
     "end_discord_event",
     "create_discord_thread",
     "create_discord_poll",
     "end_discord_poll",
     "get_server_channels",
     "get_server_roles",
-    "clear_messages",
-    "check_voice_channel",
-    "find_server_members",
-    "notify_member",
+    "delete_channel_messages",
+    "list_voice_channel_members",
+    "search_server_members",
+    "mention_member_in_channel",
 }
 
 READ_ONLY_TOOL_NAMES = {
     "list_discord_events",
     "get_server_channels",
     "get_server_roles",
-    "check_voice_channel",
-    "find_server_members",
+    "list_voice_channel_members",
+    "search_server_members",
 }
 
 
@@ -64,7 +64,7 @@ def register_event_tools(
             ListDiscordEventsSchema,
         ),
         (
-            "create_discord_event",
+            "schedule_discord_event",
             "Schedule a new server event or meeting.",
             DiscordEventSchema,
         ),
@@ -99,23 +99,23 @@ def register_event_tools(
             GetServerRolesSchema,
         ),
         (
-            "clear_messages",
-            "Delete messages in bulk.",
+            "delete_channel_messages",
+            "Delete up to 100 recent messages from the current channel.",
             ClearMessagesSchema,
         ),
         (
-            "check_voice_channel",
-            "List users in a voice channel.",
+            "list_voice_channel_members",
+            "List members currently connected to a voice or stage channel.",
             CheckVoiceChannelSchema,
         ),
         (
-            "find_server_members",
+            "search_server_members",
             "Find server members by name. This search never sends a mention or message.",
             FindServerMembersSchema,
         ),
         (
-            "notify_member",
-            "Send a message to one exact member selected by Discord ID. Use only when the user explicitly asks to notify or tag someone; never use for a search-only question.",
+            "mention_member_in_channel",
+            "Post a message in the current channel mentioning one exact member by Discord ID. Use only when the user explicitly asks to notify or tag someone; never use for a search-only question.",
             NotifyMemberSchema,
         ),
     )

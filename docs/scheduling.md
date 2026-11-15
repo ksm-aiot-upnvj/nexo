@@ -24,4 +24,4 @@ sequenceDiagram
     end
 ```
 
-Untuk Discord Scheduled Event, pengguna dapat meminta Nexo melalui `/tanya`. Model akan meminta detail yang belum ada, seperti tanggal, jam, topik, dan lokasi. Setelah lengkap, tool lokal membuat event Discord dan dapat meneruskan data ke Google Calendar. Event yang berubah atau dihapus diproses oleh listener lifecycle.
+Untuk Discord Scheduled Event, pengguna dapat meminta Nexo melalui `/ask`. Model akan meminta detail yang belum ada, seperti tanggal, jam, topik, dan lokasi. Setelah lengkap, tool lokal membuat event Discord dan dapat meneruskan data ke Google Calendar. Event yang berubah atau dihapus diproses oleh listener lifecycle.

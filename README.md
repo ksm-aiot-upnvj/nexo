@@ -55,7 +55,7 @@ flowchart TB
 
 ## ✨ Fitur Utama
 
-- **Percakapan AI & konteks per pengguna+channel:** Nexo dapat ditanya melalui mention `@Nexo` atau `/tanya`. Tiap pengguna memiliki riwayat terpisah pada setiap channel agar topik tidak tercampur.
+- **Percakapan AI & konteks per pengguna+channel:** Nexo dapat ditanya melalui mention `@Nexo` atau `/ask`. Tiap pengguna memiliki riwayat terpisah pada setiap channel agar topik tidak tercampur.
 - **Asynchronous Task Queue & Rate Limiting:** Menggunakan antrean *non-blocking* dengan sliding cooldown 5 detik per pengguna guna mencegah *queue starvation* atau serangan Denial of Service (DoS).
 - **Local AI Tools & Strict Pydantic Schemas:** LLM dapat memanggil fungsi-fungsi lokal Discord menggunakan skema validasi Pydantic yang ketat:
   - 📅 **Manajemen Acara:** Membuat dan mengakhiri Discord Scheduled Events lengkap dengan siaran pengumuman dinamis.
@@ -65,7 +65,7 @@ flowchart TB
   - 🧹 **Message Purge:** Membersihkan pesan di channel secara aman dan asinkron.
 - **Role-Based Access Control (RBAC):** Seluruh aksi destruktif atau administratif diverifikasi melalui `utils/auth_helper.py` menggunakan `config/roles.json` dan Discord `guild_permissions`.
 - **CI/CD Gateway & Portainer Auto-Deploy:** Menerima payload webhook dari GitHub (`push`, `pull_request`, `workflow_run`) dan memicu pembaruan kontainer via Portainer Webhook API secara terisolasi tanpa *Docker socket exposure*.
-- **Analitik token:** Menghitung token secara lokal dengan `tiktoken` atau tokenizer Hugging Face dari metadata LiteLLM, dan menampilkan statistik melalui `/token-stats`. Jika tokenizer tidak dapat dimuat, Nexo menggunakan perkiraan karakter.
+- **Analitik token:** Menghitung token secara lokal dengan `tiktoken` atau tokenizer Hugging Face dari metadata LiteLLM, dan menampilkan statistik melalui `/my-token-usage`. Jika tokenizer tidak dapat dimuat, Nexo menggunakan perkiraan karakter.
 
 ---
 
@@ -77,7 +77,7 @@ nexo/
 ├── config/
 │   └── settings.py             # Konfigurasi environment
 ├── cogs/                       # Modular Discord Cogs (Fitur Bot)
-│   ├── agent_orchestrator.py   # Antrean AI, rate limiting, context memory, /tanya
+│   ├── agent_orchestrator.py   # Antrean AI, rate limiting, context memory, /ask
 │   ├── core_commands.py        # Command utilitas, bantuan, dan pengumuman
 │   ├── server_events.py        # Handler AI tool Discord, reminder loop, sinkronisasi GCal
 │   └── webhook_deploy.py       # Dispatcher notifikasi webhook & trigger Portainer

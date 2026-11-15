@@ -22,7 +22,10 @@ class EndDiscordPollSchema(BaseModel):
 
 class ClearMessagesSchema(BaseModel):
     limit: int = Field(
-        default=100, description="Number of messages to scan/delete (max 500)"
+        default=100,
+        ge=1,
+        le=100,
+        description="Number of messages to scan/delete (maximum 100)",
     )
     only_today: bool = Field(
         default=False, description="Only delete messages sent today"
