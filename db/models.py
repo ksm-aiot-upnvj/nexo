@@ -165,6 +165,46 @@ class GitHubWebhookDelivery(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class WebhookOutboxJob(Base):
+    __tablename__ = "webhook_outbox_jobs"
+    __table_args__ = (
+        UniqueConstraint(
+            "delivery_id", "effect_key", name="uq_webhook_outbox_delivery_effect"
+        ),
+        Index("ix_webhook_outbox_status_available", "status", "available_at"),
+        Index("ix_webhook_outbox_status_lease", "status", "locked_until"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
+    delivery_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    effect_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    job_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", index=True, nullable=False
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class ScheduledAnnouncement(Base):
     __tablename__ = "scheduled_announcements"
 

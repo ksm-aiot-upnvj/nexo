@@ -3,16 +3,36 @@ import html
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
 import uvicorn
 from discord.ext import commands
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 from jinja2 import Environment, FileSystemLoader
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from sqlalchemy import text
 
 from config.settings import settings
+from db.repositories.webhook_outbox import (
+    claim_next_webhook_job,
+    complete_webhook_job,
+    enqueue_webhook_jobs,
+    fail_or_retry_webhook_job,
+    get_webhook_outbox_counts,
+)
+from db.session import async_session
 from utils.github_webhook_delivery import claim_delivery, finish_delivery
+from utils.metrics import (
+    HTTP_REQUEST_DURATION,
+    HTTP_REQUESTS,
+    OUTBOX_FAILURES,
+    OUTBOX_JOBS,
+    OUTBOX_RETRIES,
+    WEBHOOK_DELIVERIES,
+)
 from utils.verify import verify_signature
 from utils.webhook_schemas import (
     PullRequestSchema,
@@ -64,27 +84,29 @@ UVICORN_LOGGING_CONFIG = {
 }
 app = FastAPI(title="Nexo Webhook Gateway", docs_url="/docs")
 
-# Global reference to discord bot and strong references for background tasks
+# Global references for the gateway and durable outbox worker.
 _bot: commands.Bot | None = None
-_background_tasks: set[asyncio.Task] = set()
+_outbox_worker_active = False
 
 
-def launch_background_task(coro) -> asyncio.Task:
-    """Safely launches a background task keeping a strong reference against GC in Python 3.12+."""
-    task = asyncio.create_task(coro)
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-    return task
+@app.middleware("http")
+async def observe_http_requests(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
 
-
-async def finish_delivery_after_tasks(delivery: str, tasks: list[asyncio.Task]) -> None:
-    """Record delivery completion only after its background side effects finish."""
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    task_failed = any(isinstance(result, BaseException) for result in results)
+    started_at = time.perf_counter()
+    status_code = 500
     try:
-        await finish_delivery(delivery, error=task_failed)
-    except Exception:
-        logger.exception("Could not finalize GitHub delivery %s", delivery)
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        route = request.scope.get("route")
+        route_name = getattr(route, "path", request.url.path)
+        HTTP_REQUESTS.labels(request.method, route_name, str(status_code)).inc()
+        HTTP_REQUEST_DURATION.labels(request.method, route_name).observe(
+            time.perf_counter() - started_at
+        )
 
 
 # Jinja2 Template Loader
@@ -238,12 +260,174 @@ def should_send_event(
 
 @app.get("/nexo/health")
 async def health_check():
+    return await readiness_check()
+
+
+@app.get("/nexo/health/live")
+async def liveness_check():
+    """Report that the HTTP process is running, without checking dependencies."""
+    return {"status": "alive"}
+
+
+@app.get("/nexo/health/ready")
+async def readiness_check():
     bot_online = _bot is not None and _bot.is_ready()
-    return {
-        "status": "healthy",
+    database_online = False
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+        database_online = True
+    except Exception as error:  # noqa: BLE001
+        logger.warning("Readiness database probe failed (%s)", type(error).__name__)
+
+    ready = bot_online and database_online and _outbox_worker_active
+    body = {
+        "status": "healthy" if ready else "not_ready",
         "bot_online": bot_online,
+        "database_online": database_online,
+        "outbox_worker_active": _outbox_worker_active,
         "bot_name": str(_bot.user) if _bot and _bot.user else "Connecting...",
     }
+    return JSONResponse(status_code=200 if ready else 503, content=body)
+
+
+@app.get("/metrics")
+async def prometheus_metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+async def _dispatch_outbox_job(bot: commands.Bot, job: dict[str, Any]) -> None:
+    cog = bot.get_cog("WebhookDeployCog")
+    if cog is None:
+        raise RuntimeError("Webhook deployment cog is not loaded")
+
+    payload = job["payload"]
+    if job["job_type"] == "discord_notification":
+        await cog.send_discord_notification(
+            payload["message"],
+            target_channel_id=payload.get("target_channel_id"),
+            fallback_to_devlogs=payload.get("fallback_to_devlogs", True),
+        )
+        return
+    if job["job_type"] == "portainer_deployment":
+        await cog.trigger_docker_compose(
+            repo_key=payload["repo_key"],
+            repo_name=payload.get("repo_name", ""),
+            target_channel_id=payload.get("target_channel_id"),
+            announcement_payload=payload.get("announcement_payload"),
+            notify_start=job["attempt_count"] == 1,
+            raise_on_failure=True,
+        )
+        return
+    raise ValueError(f"Unsupported webhook outbox job type: {job['job_type']}")
+
+
+async def _refresh_outbox_metrics() -> None:
+    try:
+        counts = await get_webhook_outbox_counts()
+    except Exception as error:  # noqa: BLE001
+        logger.warning("Could not refresh outbox metrics (%s)", type(error).__name__)
+        return
+    for status in ("pending", "processing", "sent", "failed"):
+        OUTBOX_JOBS.labels(status).set(counts.get(status, 0))
+
+
+async def run_webhook_outbox_worker(bot: commands.Bot) -> None:
+    """Deliver durable webhook effects and recover expired job leases after restart."""
+    global _outbox_worker_active
+    await bot.wait_until_ready()
+    _outbox_worker_active = True
+    logger.info("Webhook outbox worker started")
+    last_metrics_refresh = 0.0
+    try:
+        while True:
+            try:
+                job = await claim_next_webhook_job()
+                if job is None:
+                    now = time.monotonic()
+                    if now - last_metrics_refresh >= 30:
+                        await _refresh_outbox_metrics()
+                        last_metrics_refresh = now
+                    await asyncio.sleep(settings.GITHUB_WEBHOOK_OUTBOX_POLL_SECONDS)
+                    continue
+
+                try:
+                    async with asyncio.timeout(120):
+                        await _dispatch_outbox_job(bot, job)
+                    await complete_webhook_job(job["id"])
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:  # noqa: BLE001
+                    terminal = await fail_or_retry_webhook_job(job["id"], error)
+                    if terminal:
+                        OUTBOX_FAILURES.inc()
+                        logger.error(
+                            "Webhook outbox job exhausted retries (job_id=%s, error_type=%s)",
+                            job["id"],
+                            type(error).__name__,
+                        )
+                        if job["job_type"] == "portainer_deployment":
+                            cog = bot.get_cog("WebhookDeployCog")
+                            if cog:
+                                payload = job["payload"]
+                                repo_name = (
+                                    payload.get("repo_name") or payload["repo_key"]
+                                )
+                                failure_notice = {
+                                    "content": (
+                                        "❌ **Portainer Deploy Failed**\n"
+                                        f"Repo: **{repo_name}**\n"
+                                        "The Portainer trigger failed after all retry attempts."
+                                    )
+                                }
+                                target_channel_id = payload.get("target_channel_id")
+                                try:
+                                    if target_channel_id and bot.get_channel(
+                                        target_channel_id
+                                    ):
+                                        await cog.send_discord_notification(
+                                            failure_notice,
+                                            target_channel_id=target_channel_id,
+                                            fallback_to_devlogs=False,
+                                        )
+                                    devlogs_channel_id = (
+                                        settings.WEBHOOK_DEVLOGS_CHANNEL_ID
+                                    )
+                                    if (
+                                        devlogs_channel_id
+                                        and devlogs_channel_id != target_channel_id
+                                    ):
+                                        await cog.send_discord_notification(
+                                            failure_notice,
+                                            target_channel_id=devlogs_channel_id,
+                                            fallback_to_devlogs=False,
+                                        )
+                                except Exception as notification_error:  # noqa: BLE001
+                                    logger.error(
+                                        "Could not send terminal deployment failure notice (%s)",
+                                        type(notification_error).__name__,
+                                    )
+                    else:
+                        OUTBOX_RETRIES.inc()
+                        logger.warning(
+                            "Webhook outbox job will retry (job_id=%s, attempt=%s, error_type=%s)",
+                            job["id"],
+                            job["attempt_count"],
+                            type(error).__name__,
+                        )
+                await _refresh_outbox_metrics()
+                last_metrics_refresh = time.monotonic()
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                logger.exception(
+                    "Webhook outbox worker iteration failed (%s)",
+                    type(error).__name__,
+                )
+                await asyncio.sleep(settings.GITHUB_WEBHOOK_OUTBOX_POLL_SECONDS)
+    finally:
+        _outbox_worker_active = False
+        logger.info("Webhook outbox worker stopped")
 
 
 @app.post("/nexo/webhook")
@@ -296,26 +480,32 @@ async def webhook_handler(
 
     if not claimed:
         logger.info("Ignoring duplicate GitHub webhook delivery: %s", delivery)
+        WEBHOOK_DELIVERIES.labels("duplicate").inc()
         return {"status": "duplicate_ignored", "event": event, "delivery": delivery}
 
-    background_tasks: list[asyncio.Task] = []
+    outbox_jobs: list[dict[str, Any]] = []
     try:
-        result = await _process_verified_webhook(
-            event, delivery, payload, background_tasks
-        )
+        result = await _process_verified_webhook(event, delivery, payload, outbox_jobs)
+        if outbox_jobs:
+            await enqueue_webhook_jobs(delivery, outbox_jobs)
+            WEBHOOK_DELIVERIES.labels("queued").inc()
+            return {
+                "status": "queued",
+                "event": event,
+                "delivery": delivery,
+                "outbox_jobs": len(outbox_jobs),
+            }
     except Exception:
+        WEBHOOK_DELIVERIES.labels("failed").inc()
         try:
             await finish_delivery(delivery, error=True)
         except Exception:
             logger.exception("Could not record failed GitHub delivery %s", delivery)
         raise
 
-    if background_tasks:
-        launch_background_task(finish_delivery_after_tasks(delivery, background_tasks))
-        return {"status": "processing", "event": event, "delivery": delivery}
-
     try:
         await finish_delivery(delivery)
+        WEBHOOK_DELIVERIES.labels("accepted").inc()
     except Exception as e:
         logger.exception("Could not record accepted GitHub delivery %s", delivery)
         raise HTTPException(
@@ -328,7 +518,7 @@ async def _process_verified_webhook(
     event: str,
     delivery: str,
     payload: Any,
-    background_tasks: list[asyncio.Task] | None = None,
+    outbox_jobs: list[dict[str, Any]] | None = None,
 ):
     """Process a signature-verified and uniquely claimed GitHub delivery."""
 
@@ -344,12 +534,41 @@ async def _process_verified_webhook(
 
     cog = _bot.get_cog("WebhookDeployCog") if _bot else None
     projects_config = load_projects_config()
-    scheduled_tasks = background_tasks if background_tasks is not None else []
+    scheduled_jobs = outbox_jobs if outbox_jobs is not None else []
 
-    def schedule_background_task(coro):
-        task = launch_background_task(coro)
-        scheduled_tasks.append(task)
-        return task
+    def schedule_notification(
+        message_payload: dict[str, Any],
+        target_channel_id: int | None = None,
+        fallback_to_devlogs: bool = True,
+    ) -> None:
+        scheduled_jobs.append(
+            {
+                "job_type": "discord_notification",
+                "payload": {
+                    "message": message_payload,
+                    "target_channel_id": target_channel_id,
+                    "fallback_to_devlogs": fallback_to_devlogs,
+                },
+            }
+        )
+
+    def schedule_deployment(
+        repo_key: str,
+        repo_name: str,
+        target_channel_id: int | None,
+        announcement_payload: dict[str, Any],
+    ) -> None:
+        scheduled_jobs.append(
+            {
+                "job_type": "portainer_deployment",
+                "payload": {
+                    "repo_key": repo_key,
+                    "repo_name": repo_name,
+                    "target_channel_id": target_channel_id,
+                    "announcement_payload": announcement_payload,
+                },
+            }
+        )
 
     if event == "ping":
         zen = payload.get("zen", "GitHub Webhook Connected!")
@@ -371,11 +590,7 @@ async def _process_verified_webhook(
                 )
             }
             target_channel_id = repo_config.get("discord_channel_id")
-            schedule_background_task(
-                cog.send_discord_notification(
-                    ping_msg, target_channel_id=target_channel_id
-                )
-            )
+            schedule_notification(ping_msg, target_channel_id=target_channel_id)
 
         return {"status": "ping_received", "zen": zen, "delivery": delivery}
 
@@ -391,7 +606,7 @@ async def _process_verified_webhook(
                     f"Stored payload to `{event_file}`."
                 ),
             }
-            schedule_background_task(cog.send_discord_notification(devlog_msg))
+            schedule_notification(devlog_msg)
 
         return {
             "status": "unsupported_event_stored",
@@ -510,19 +725,15 @@ async def _process_verified_webhook(
                 action = getattr(model, "action", None)
                 if action == "released":
                     dest_channel_id = release_channel_id or target_channel_id
-                    schedule_background_task(
-                        cog.send_discord_notification(
-                            message_payload, target_channel_id=dest_channel_id
-                        )
+                    schedule_notification(
+                        message_payload, target_channel_id=dest_channel_id
                     )
                 elif action == "prereleased":
                     devlogs_channel_id = int(settings.WEBHOOK_DEVLOGS_CHANNEL_ID)
                     dest_channel_id = target_channel_id or devlogs_channel_id
                     if dest_channel_id and dest_channel_id != release_channel_id:
-                        schedule_background_task(
-                            cog.send_discord_notification(
-                                message_payload, target_channel_id=dest_channel_id
-                            )
+                        schedule_notification(
+                            message_payload, target_channel_id=dest_channel_id
                         )
                     else:
                         logger.info(
@@ -534,22 +745,18 @@ async def _process_verified_webhook(
                     )
             elif is_docs_update:
                 # Documentation has its own hosting/deployment lifecycle.
-                schedule_background_task(
-                    cog.send_discord_notification(
-                        message_payload, target_channel_id=target_channel_id
-                    )
+                schedule_notification(
+                    message_payload, target_channel_id=target_channel_id
                 )
             elif is_github_actions_deployment:
                 # The repo channel receives every result. Successful deployments
                 # are also mirrored to devlogs; failures stay out of devlogs.
                 project_channel_id = target_channel_id
                 if project_channel_id:
-                    schedule_background_task(
-                        cog.send_discord_notification(
-                            message_payload,
-                            target_channel_id=project_channel_id,
-                            fallback_to_devlogs=False,
-                        )
+                    schedule_notification(
+                        message_payload,
+                        target_channel_id=project_channel_id,
+                        fallback_to_devlogs=False,
                     )
                 else:
                     logger.error(
@@ -561,36 +768,28 @@ async def _process_verified_webhook(
                 if wf_run and getattr(wf_run, "conclusion", None) == "success":
                     devlogs_channel_id = int(settings.WEBHOOK_DEVLOGS_CHANNEL_ID)
                     if devlogs_channel_id and devlogs_channel_id != project_channel_id:
-                        schedule_background_task(
-                            cog.send_discord_notification(
-                                message_payload,
-                                target_channel_id=devlogs_channel_id,
-                            )
+                        schedule_notification(
+                            message_payload,
+                            target_channel_id=devlogs_channel_id,
                         )
                     elif (
                         not devlogs_channel_id
                         and settings.WEBHOOK_DEVLOGS_CHANNEL
                         and project_channel_id
                     ):
-                        schedule_background_task(
-                            cog.send_discord_notification(message_payload)
-                        )
+                        schedule_notification(message_payload)
             elif is_cd_success:
                 # Defer sending rich CD announcement until AFTER VPS deployment succeeds
-                schedule_background_task(
-                    cog.trigger_docker_compose(
-                        repo_key=repo_key,
-                        repo_name=repo_full_name,
-                        target_channel_id=target_channel_id,
-                        announcement_payload=message_payload,
-                    )
+                schedule_deployment(
+                    repo_key=repo_key,
+                    repo_name=repo_full_name,
+                    target_channel_id=target_channel_id,
+                    announcement_payload=message_payload,
                 )
             else:
                 # Standard non-CD event notification (Push, PR, In-progress workflow)
-                schedule_background_task(
-                    cog.send_discord_notification(
-                        message_payload, target_channel_id=target_channel_id
-                    )
+                schedule_notification(
+                    message_payload, target_channel_id=target_channel_id
                 )
 
     return {"status": "success", "event": event, "delivery": delivery}
@@ -612,5 +811,10 @@ async def start_gateway_server(bot: commands.Bot):
         use_colors=False,
     )
     server = uvicorn.Server(config)
+    worker_task = asyncio.create_task(run_webhook_outbox_worker(bot))
     logger.info(f"Starting FastAPI Webhook Gateway Server on port {port}...")
-    await server.serve()
+    try:
+        await server.serve()
+    finally:
+        worker_task.cancel()
+        await asyncio.gather(worker_task, return_exceptions=True)

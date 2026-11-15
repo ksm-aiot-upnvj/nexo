@@ -167,62 +167,43 @@ class WebhookDeployCog(commands.Cog):
         target_display: str,
         target_channel_id: int | None = None,
         announcement_payload: dict[str, Any] | None = None,
+        *,
+        notify_start: bool = True,
+        raise_on_failure: bool = False,
     ):
         logger.info(f"Triggering Portainer Webhook for {target_display}...")
         is_self_update = "nexo" in target_display.lower()
-        if is_self_update:
+        if is_self_update and notify_start:
             pre_payload = {
                 "content": (
                     f"🔄 **Self-Update Initiated for {target_display}**\n"
                     "Triggering the Portainer webhook to recreate the Nexo container..."
                 ),
             }
-            await self.send_discord_notification(
-                pre_payload, target_channel_id=target_channel_id
-            )
+            try:
+                await self.send_discord_notification(
+                    pre_payload, target_channel_id=target_channel_id
+                )
+            except Exception as error:  # noqa: BLE001
+                logger.warning(
+                    "Could not send deployment start notification (%s)",
+                    type(error).__name__,
+                )
             await asyncio.sleep(2)
 
         try:
             async with aiohttp.ClientSession() as session:  # noqa: SIM117
                 async with session.post(webhook_url, timeout=30) as resp:
-                    if resp.status in (200, 204):
-                        logger.info(
-                            f"Portainer redeploy triggered successfully for {target_display}"
-                        )
-                        payload = {
-                            "content": (
-                                f"🚀 **Portainer Redeploy Triggered for {target_display}**\n"
-                                "The Portainer webhook was triggered successfully. The container is being updated..."
-                            )
-                        }
-                        await self.send_discord_notification(
-                            payload, target_channel_id=target_channel_id
-                        )
-
-                        if announcement_payload:
-                            await self.send_discord_notification(
-                                announcement_payload,
-                                target_channel_id=target_channel_id,
-                            )
-                            devlogs_channel_id = int(
-                                settings.WEBHOOK_DEVLOGS_CHANNEL_ID
-                            )
-                            if (
-                                devlogs_channel_id
-                                and devlogs_channel_id != target_channel_id
-                            ):
-                                await self.send_discord_notification(
-                                    announcement_payload,
-                                    target_channel_id=devlogs_channel_id,
-                                )
-                    else:
+                    if resp.status not in (200, 204):
                         text_resp = await resp.text()
                         raise RuntimeError(
                             f"Portainer webhook returned status {resp.status}: {text_resp}"
                         )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             err_msg = truncate_output(str(e))
             logger.error(f"Portainer webhook trigger failed: {err_msg}")
+            if raise_on_failure:
+                raise
             fail_payload = {
                 "content": (
                     f"❌ **Portainer Deploy Failed**\n"
@@ -238,6 +219,35 @@ class WebhookDeployCog(commands.Cog):
                 await self.send_discord_notification(
                     fail_payload, target_channel_id=devlogs_channel_id
                 )
+            return
+
+        logger.info(f"Portainer redeploy triggered successfully for {target_display}")
+        success_payload = {
+            "content": (
+                f"🚀 **Portainer Redeploy Triggered for {target_display}**\n"
+                "The Portainer webhook was triggered successfully. The container is being updated..."
+            )
+        }
+        try:
+            await self.send_discord_notification(
+                success_payload, target_channel_id=target_channel_id
+            )
+            if announcement_payload:
+                await self.send_discord_notification(
+                    announcement_payload,
+                    target_channel_id=target_channel_id,
+                )
+                devlogs_channel_id = int(settings.WEBHOOK_DEVLOGS_CHANNEL_ID)
+                if devlogs_channel_id and devlogs_channel_id != target_channel_id:
+                    await self.send_discord_notification(
+                        announcement_payload,
+                        target_channel_id=devlogs_channel_id,
+                    )
+        except Exception as error:  # noqa: BLE001
+            logger.warning(
+                "Portainer trigger succeeded, but a Discord notification failed (%s)",
+                type(error).__name__,
+            )
 
     async def trigger_docker_compose(
         self,
@@ -245,6 +255,9 @@ class WebhookDeployCog(commands.Cog):
         repo_name: str = "",
         target_channel_id: int | None = None,
         announcement_payload: dict[str, Any] | None = None,
+        *,
+        notify_start: bool = True,
+        raise_on_failure: bool = False,
     ):
         """Standardized deployment dispatcher using Portainer Webhooks."""
         self.portainer_webhooks = build_portainer_webhooks()
@@ -259,6 +272,8 @@ class WebhookDeployCog(commands.Cog):
                 target_display=target_display,
                 target_channel_id=target_channel_id,
                 announcement_payload=announcement_payload,
+                notify_start=notify_start,
+                raise_on_failure=raise_on_failure,
             )
             return
 
