@@ -2,7 +2,7 @@
 
 Gateway FastAPI Nexo menerima webhook pada endpoint `POST /nexo/webhook`. GitHub mengirimkan nama event melalui header `X-GitHub-Event`, ID delivery melalui `X-GitHub-Delivery`, dan signature melalui `X-Hub-Signature-256`. Nexo memverifikasi signature dengan `GITHUB_SECRET` sebelum membaca payload.
 
-Setiap payload disimpan ke `data/payloads/<event>.json` untuk analisis dan debugging. Payload untuk `push`, `pull_request`, `release`, dan `workflow_run` divalidasi dengan schema masing-masing. Event yang tidak didukung tetap disimpan dan menghasilkan notifikasi devlog.
+Setiap payload disimpan ke `data/payloads/<event>.json` untuk analisis dan debugging. Payload untuk `push`, `pull_request`, `release`, dan `workflow_run` divalidasi dengan schema masing-masing. Efek samping seperti notifikasi Discord dan pemanggilan Portainer dicatat sebagai job persistent di PostgreSQL sebelum gateway mengakui delivery. Worker menjalankan job dengan retry bertahap dan dapat mengambil kembali job yang lease-nya kedaluwarsa setelah restart.
 
 ```mermaid
 sequenceDiagram
@@ -11,6 +11,8 @@ sequenceDiagram
     participant Schema as Event schema
     participant Config as projects.json
     participant Template as Jinja template
+    participant DB as PostgreSQL outbox
+    participant Worker as Outbox worker
     participant Cog as WebhookDeployCog
     participant Discord
     participant Portainer
@@ -22,13 +24,18 @@ sequenceDiagram
     Gateway->>Gateway: Filter action yang relevan
     Gateway->>Config: Cari repository dan channel tujuan
     Gateway->>Template: Render pesan Discord
-    Template-->>Cog: Payload content/embed/buttons
+    Template-->>Gateway: Payload content/embed/buttons
+    Gateway->>DB: Simpan job idempotent
+    Gateway-->>GitHub: Acknowledge setelah job tersimpan
+    Worker->>DB: Claim job dengan lease
+    Worker->>Cog: Jalankan efek terjadwal
     Cog->>Discord: Kirim notifikasi
     opt Event deployment berhasil
         Cog->>Portainer: POST Portainer webhook
         Portainer-->>Cog: Status redeploy
         Cog->>Discord: Kirim status deployment
     end
+    Worker->>DB: Tandai sent, retry, atau failed
 ```
 
 ## Event yang diproses
@@ -51,4 +58,4 @@ GitHub harus diarahkan ke URL publik aplikasi, misalnya:
 https://domain-anda.example/nexo/webhook
 ```
 
-Aktifkan event yang diperlukan pada pengaturan webhook repository dan gunakan secret yang sama dengan `GITHUB_SECRET`. Endpoint kesehatan `GET /nexo/health` dapat dipakai untuk memeriksa apakah gateway hidup dan bot sudah online.
+Aktifkan event yang diperlukan pada pengaturan webhook repository dan gunakan secret yang sama dengan `GITHUB_SECRET`. Gunakan endpoint `GET /nexo/health/live` untuk memeriksa proses HTTP, `GET /nexo/health/ready` untuk kesiapan bot, database, dan outbox worker, serta `/metrics` untuk metrik Prometheus. `GET /nexo/health` tetap menjadi alias readiness.

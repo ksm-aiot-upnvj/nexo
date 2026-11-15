@@ -21,7 +21,11 @@ Gunakan ID Snowflake Discord untuk pengaturan channel dan role.
 | `DATABASE_URL` | URL PostgreSQL, misalnya `postgresql+asyncpg://user:password@localhost:5432/nexo_db`. |
 | `LLM_BASE_URL` | Base URL API OpenAI-compatible. Azure: `https://<resource>.services.ai.azure.com/openai/v1`; LiteLLM standar: `http://litellm-gateway:4000/v1`; LiteLLM di balik prefix gateway: `https://<host>/gateway` atau `https://<host>/gateway/v1`. Jangan tambahkan `/model/info` atau query string. |
 | `LLM_API_KEY` | Kunci autentikasi provider LLM atau gateway. Kosongkan hanya jika provider memang mengizinkan akses tanpa kunci. |
-| `LLM_REQUEST_TIMEOUT_SECONDS` | Timeout inference LLM dalam detik. Default `120`. |
+| `LLM_REQUEST_TIMEOUT_SECONDS` | Timeout per request inference LLM. Default `180` detik. |
+| `LLM_JOB_TIMEOUT_SECONDS` | Batas total waktu satu pekerjaan AI di antrean, termasuk beberapa panggilan inference. Default `600` detik. |
+| `LLM_MAX_RETRIES` | Jumlah retry otomatis SDK LLM untuk gangguan sementara. Default `2`. |
+| `LLM_QUEUE_MAX_SIZE` | Kapasitas maksimum antrean pekerjaan AI. Permintaan baru ditolak dengan pesan penuh jika antrean mencapai batas. Default `50`. |
+| `SUMMARY_SCAN_LIMIT` | Batas maksimum pesan terbaru yang diperiksa oleh `/summarize`. Nilainya dibatasi `1` sampai `100`; default `100`. Budget token dapat membuat jumlah yang diringkas lebih sedikit. |
 | `HF_TOKEN` | Token Hugging Face read-only opsional untuk mengunduh tokenizer private/gated yang ditunjuk metadata LiteLLM. Token ini terpisah dari `LLM_API_KEY`. |
 | `LLM_MODEL_NAME` | Nama model atau deployment yang dikirim pada request LLM. Untuk Azure, nama deployment yang tidak menyerupai nama model yang dikenal bisa membuat penghitung token memakai fallback perkiraan. |
 | `MCP_SERVER_URL` | Base URL MCP Server; Nexo menambahkan `/sse` untuk koneksi tools. Jangan tambahkan `/sse`. |
@@ -29,6 +33,10 @@ Gunakan ID Snowflake Discord untuk pengaturan channel dan role.
 | `HF_HUB_OFFLINE` | Set `true` untuk memuat tokenizer hanya dari cache Hugging Face lokal. Pastikan tokenizer sudah tersedia di cache sebelum mengaktifkannya; bila tidak, Nexo memakai penghitung token perkiraan. Default `false`. |
 | `MAX_GROUP_CONTEXT_CHARS` | Batas karakter riwayat channel yang dibaca saat Nexo disebut di percakapan grup. Default `10000`. |
 | `GITHUB_SECRET` | Secret HMAC SHA-256 untuk validasi GitHub webhook. |
+| `GITHUB_WEBHOOK_MAX_BODY_BYTES` | Ukuran maksimum body GitHub webhook. Default `5242880` byte (5 MiB). |
+| `GITHUB_WEBHOOK_OUTBOX_POLL_SECONDS` | Jeda worker saat tidak ada pekerjaan webhook yang siap. Default `1` detik. |
+| `GITHUB_WEBHOOK_OUTBOX_LEASE_SECONDS` | Lama lease pekerjaan sebelum dapat diambil ulang setelah worker berhenti. Default `300` detik. |
+| `GITHUB_WEBHOOK_OUTBOX_MAX_ATTEMPTS` | Percobaan maksimum untuk setiap efek webhook sebelum ditandai gagal. Default `5`. |
 | `PORT` / `HOST` | Port dan host proses aplikasi. Default `8000` dan `0.0.0.0`. |
 | `WEBHOOK_PORT` | Port gateway FastAPI webhook. Default `8000`. |
 | `WEBHOOK_DEVLOGS_CHANNEL` | URL webhook Discord untuk mengirim notifikasi devlog. |

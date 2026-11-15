@@ -18,6 +18,15 @@ class Settings(BaseSettings):
         gt=0,
         validation_alias="GITHUB_WEBHOOK_MAX_BODY_BYTES",
     )
+    GITHUB_WEBHOOK_OUTBOX_POLL_SECONDS: float = Field(
+        default=1.0, gt=0, validation_alias="GITHUB_WEBHOOK_OUTBOX_POLL_SECONDS"
+    )
+    GITHUB_WEBHOOK_OUTBOX_LEASE_SECONDS: int = Field(
+        default=300, gt=0, validation_alias="GITHUB_WEBHOOK_OUTBOX_LEASE_SECONDS"
+    )
+    GITHUB_WEBHOOK_OUTBOX_MAX_ATTEMPTS: int = Field(
+        default=5, ge=1, validation_alias="GITHUB_WEBHOOK_OUTBOX_MAX_ATTEMPTS"
+    )
 
     PENGURUS_CHANNEL_ID: int = Field(default=0, validation_alias="PENGURUS_CHANNEL_ID")
     ANNOUNCEMENT_CHANNEL_ID: int = Field(
@@ -46,7 +55,17 @@ class Settings(BaseSettings):
     )
     LLM_API_KEY: str = Field(default="", validation_alias="LLM_API_KEY")
     LLM_REQUEST_TIMEOUT_SECONDS: float = Field(
-        default=120.0, gt=0, validation_alias="LLM_REQUEST_TIMEOUT_SECONDS"
+        default=180.0, gt=0, validation_alias="LLM_REQUEST_TIMEOUT_SECONDS"
+    )
+    LLM_JOB_TIMEOUT_SECONDS: float = Field(
+        default=600.0, gt=0, validation_alias="LLM_JOB_TIMEOUT_SECONDS"
+    )
+    LLM_MAX_RETRIES: int = Field(default=2, ge=0, validation_alias="LLM_MAX_RETRIES")
+    LLM_QUEUE_MAX_SIZE: int = Field(
+        default=50, ge=1, validation_alias="LLM_QUEUE_MAX_SIZE"
+    )
+    SUMMARY_SCAN_LIMIT: int = Field(
+        default=100, ge=1, le=100, validation_alias="SUMMARY_SCAN_LIMIT"
     )
     HF_TOKEN: str = Field(default="", validation_alias="HF_TOKEN")
     HF_HUB_OFFLINE: bool = Field(default=False, validation_alias="HF_HUB_OFFLINE")

@@ -83,6 +83,7 @@ async def main():
         logger.error("DISCORD_BOT_TOKEN environment variable not set.")
         return
 
+    gateway_task = None
     try:
         # Load all local Cogs
         cogs_to_load = [
@@ -103,10 +104,13 @@ async def main():
         # Launch FastAPI Webhook Gateway Server in background task
         from utils.gateway_server import start_gateway_server
 
-        asyncio.create_task(start_gateway_server(bot))
+        gateway_task = asyncio.create_task(start_gateway_server(bot))
 
         await bot.start(TOKEN)
     finally:
+        if gateway_task:
+            gateway_task.cancel()
+            await asyncio.gather(gateway_task, return_exceptions=True)
         for cog in list(bot.cogs.values()):
             if hasattr(cog, "cog_unload"):
                 try:

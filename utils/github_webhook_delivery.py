@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, update
 from sqlalchemy.dialects.postgresql import insert
 
-from db.models import GitHubWebhookDelivery
+from db.models import GitHubWebhookDelivery, WebhookOutboxJob
 from db.session import async_session
 
 PROCESSING_LEASE = timedelta(minutes=10)
@@ -14,9 +14,17 @@ async def claim_delivery(delivery_id: str, event: str) -> bool:
     """Claim a new delivery, or reclaim one whose prior attempt failed/stalled."""
     now = datetime.now(UTC)
     async with async_session() as session:
+        retention_cutoff = now - DELIVERY_RETENTION
+        await session.execute(
+            delete(WebhookOutboxJob).where(
+                WebhookOutboxJob.created_at < retention_cutoff,
+                WebhookOutboxJob.status.in_(("sent", "failed")),
+            )
+        )
         await session.execute(
             delete(GitHubWebhookDelivery).where(
-                GitHubWebhookDelivery.received_at < now - DELIVERY_RETENTION
+                GitHubWebhookDelivery.received_at < retention_cutoff,
+                GitHubWebhookDelivery.status.in_(("accepted", "failed")),
             )
         )
         statement = (
